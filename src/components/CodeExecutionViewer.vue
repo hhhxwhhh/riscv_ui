@@ -9,8 +9,9 @@ const props = defineProps({
 
 // Watch for device changes to simulate context switching
 watch(() => props.deviceName, () => {
-    // Optional: flash effect or briefly pause
-    startSimulation();
+    // Reset and restart to give visual feedback of switching context
+    resetSimulation();
+    setTimeout(() => startSimulation(), 100);
 });
 
 // Mock Data

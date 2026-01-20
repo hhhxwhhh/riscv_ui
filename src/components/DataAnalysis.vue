@@ -12,11 +12,15 @@ const stats = ref({ standard: [120, 0.8, 60], custom: [950, 5.5, 99], latencyStd
 
 // Simulate different performance profiles for devices
 const getDeviceData = (name: string) => {
-    // "Secure" or "Modern" devices get better stats
+    // "Secure" - Highest Performance
     if (name.includes('Dev-C') || name.includes('Secure')) {
         return { standard: [135, 0.9, 65], custom: [980, 5.8, 100], latencyStd: '11.2 ms', latencyCust: '0.6 ms' };
     }
-    // "Legacy" devices show bigger gap or lower base
+    // "Low Power" / Dev-B - Lowest Performance
+    if (name.includes('Dev-B')) {
+        return { standard: [75, 0.5, 40], custom: [750, 3.5, 90], latencyStd: '24.5 ms', latencyCust: '1.8 ms' };
+    }
+    // "Standard" / Dev-A - Mid Performance
     return { standard: [90, 0.6, 50], custom: [850, 4.2, 95], latencyStd: '18.2 ms', latencyCust: '1.2 ms' };
 };
 
@@ -122,3 +126,5 @@ onUnmounted(() => {
         </div>
     </div>
 </template>
+
+<style scoped></style>
