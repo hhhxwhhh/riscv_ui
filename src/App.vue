@@ -1,7 +1,18 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
+
+const selectedDevice = ref('IoT Dev-A');
+const selectedDeviceIP = ref('192.168.1.101');
+
+const handleNodeSelect = (node: any) => {
+  if (node.name !== 'Gateway') {
+    selectedDevice.value = node.name;
+    selectedDeviceIP.value = node.value;
+  }
+};
 </script>
 
 <template>
@@ -20,14 +31,14 @@ import DataAnalysis from './components/DataAnalysis.vue';
 
     <!-- Top Section: Topology -->
     <section class="flex-none">
-      <DeviceTopology />
+      <DeviceTopology @node-select="handleNodeSelect" v-model="selectedDevice" />
     </section>
 
     <!-- Bottom Section: Execution & Analysis -->
     <section class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
       <!-- Left: Code Execution (2/3 width) -->
       <div class="lg:col-span-2 min-h-[400px]">
-        <CodeExecutionViewer />
+        <CodeExecutionViewer :deviceName="selectedDevice" :deviceIP="selectedDeviceIP" />
       </div>
 
       <!-- Right: Analysis (1/3 width) -->

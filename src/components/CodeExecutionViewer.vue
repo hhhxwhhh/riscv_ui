@@ -1,6 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { Play, Pause, RotateCcw } from 'lucide-vue-next';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { Play, Pause, RotateCcw, Cpu } from 'lucide-vue-next';
+
+const props = defineProps({
+    deviceName: { type: String, default: 'IoT Dev-A' },
+    deviceIP: { type: String, default: '192.168.1.101' }
+});
+
+// Watch for device changes to simulate context switching
+watch(() => props.deviceName, () => {
+    // Optional: flash effect or briefly pause
+    startSimulation();
+});
 
 // Mock Data
 const standardInstructions = [
@@ -72,7 +83,19 @@ onUnmounted(() => {
 <template>
     <div class="card h-full flex flex-col p-4 bg-gray-800 rounded-lg border border-gray-700">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-gray-100">Instruction Execution Flow</h2>
+            <div class="flex flex-col">
+                <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
+                    <Cpu class="w-5 h-5 text-blue-400" />
+                    Instruction Execution Flow
+                </h2>
+                <div class="text-xs text-gray-400 mt-1">
+                    Monitoring: <span class="text-blue-300 font-bold">{{ deviceName }}</span>
+                    <span class="mx-1">|</span>
+                    Target IP: <span class="text-gray-500 font-mono">{{ deviceIP }}</span>
+                    <span class="mx-1">|</span>
+                    Source: <span class="text-red-400">Gateway</span>
+                </div>
+            </div>
             <div class="flex space-x-2">
                 <button @click="isRunning ? stopSimulation() : startSimulation()"
                     class="p-2 rounded hover:bg-gray-700 text-gray-300 transition-colors">
