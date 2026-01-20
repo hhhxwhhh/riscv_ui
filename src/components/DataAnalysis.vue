@@ -30,8 +30,10 @@ const updateChart = () => {
 
     chartInstance.setOption({
         series: [
-            { data: stats.value.standard },
-            { data: stats.value.custom }
+            { data: [stats.value.standard[0]] },  // Top: Throughput Std
+            { data: [stats.value.custom[0]] },    // Top: Throughput Cust
+            { data: [stats.value.standard[2]] },  // Bottom: Score Std
+            { data: [stats.value.custom[2]] }     // Bottom: Score Cust
         ]
     });
 };
@@ -44,58 +46,63 @@ onMounted(() => {
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');
 
+
         const option = {
-            title: {
-                text: 'Cryptographic Performance Analysis',
-                left: 'center',
-                textStyle: { color: '#eee' }
-            },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' }
-            },
+            title: [
+                { text: 'Throughput (MB/s)', left: 'center', top: '5%', textStyle: { color: '#9ca3af', fontSize: 12 } },
+                { text: 'Security Score', left: 'center', top: '55%', textStyle: { color: '#9ca3af', fontSize: 12 } }
+            ],
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
             legend: {
-                data: ['Standard / Software', 'RISC-V Crypto Extension'],
-                top: 30,
+                data: ['Software (Std)', 'RISC-V Crypto (HW)'],
+                top: 'bottom',
                 textStyle: { color: "#9ca3af" }
             },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            },
-            xAxis: {
-                type: 'value',
-                boundaryGap: [0, 0.01],
-                axisLabel: { color: "#9ca3af" },
-                splitLine: { lineStyle: { color: '#374151' } }
-            },
-            yAxis: {
-                type: 'category',
-                data: ['Throughput (MB/s)', 'Efficiency (Ops/Cycle)', 'Security Score'],
-                axisLabel: { color: "#d1d5db" }
-            },
+            grid: [
+                { top: '15%', bottom: '55%', left: '15%', right: '5%' }, // Top Chart (Bar)
+                { top: '65%', bottom: '15%', left: '15%', right: '5%' }  // Bottom Chart (Bar)
+            ],
+            xAxis: [
+                { type: 'value', gridIndex: 0, axisLabel: { color: "#9ca3af" }, splitLine: { lineStyle: { color: '#374151' } } },
+                { type: 'value', gridIndex: 1, max: 100, axisLabel: { color: "#9ca3af" }, splitLine: { lineStyle: { color: '#374151' } } }
+            ],
+            yAxis: [
+                { type: 'category', gridIndex: 0, data: ['Throughput'], axisLabel: { show: false } },
+                { type: 'category', gridIndex: 1, data: ['Security'], axisLabel: { show: false } }
+            ],
             series: [
+                // Top Chart: Throughput
                 {
-                    name: 'Standard / Software',
-                    type: 'bar',
-                    data: stats.value.standard,
+                    name: 'Software (Std)', type: 'bar', xAxisIndex: 0, yAxisIndex: 0,
+                    data: [stats.value.standard[0]],
                     itemStyle: { color: '#ef4444' },
-                    label: { show: true, position: 'right', color: '#fff' }
+                    label: { show: true, position: 'right', color: '#fff', formatter: '{c} MB/s' }
                 },
                 {
-                    name: 'RISC-V Crypto Extension',
-                    type: 'bar',
-                    data: stats.value.custom,
+                    name: 'RISC-V Crypto (HW)', type: 'bar', xAxisIndex: 0, yAxisIndex: 0,
+                    data: [stats.value.custom[0]],
                     itemStyle: { color: '#22c55e' },
-                    label: { show: true, position: 'right', color: '#fff' }
+                    label: { show: true, position: 'right', color: '#fff', formatter: '{c} MB/s' }
+                },
+                // Bottom Chart: Security Score
+                {
+                    name: 'Software (Std)', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+                    data: [stats.value.standard[2]], // Index 2 is Score
+                    itemStyle: { color: '#ef4444' },
+                    label: { show: true, position: 'right', color: '#fff', formatter: '{c}/100' }
+                },
+                {
+                    name: 'RISC-V Crypto (HW)', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
+                    data: [stats.value.custom[2]],
+                    itemStyle: { color: '#22c55e' },
+                    label: { show: true, position: 'right', color: '#fff', formatter: '{c}/100' }
                 }
             ],
             backgroundColor: 'transparent'
         };
 
         chartInstance.setOption(option);
+
         window.addEventListener('resize', handleResize);
     }
 });
