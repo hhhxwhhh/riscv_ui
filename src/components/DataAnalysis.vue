@@ -1,29 +1,59 @@
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted } from 'vue';
+import { onMounted, ref, onUnmounted, watch } from 'vue';
 import * as echarts from 'echarts';
+
+const props = defineProps({
+    deviceName: { type: String, default: 'IoT Dev-A' }
+});
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
+const stats = ref({ standard: [120, 0.8, 60], custom: [950, 5.5, 99], latencyStd: '12.5 ms', latencyCust: '0.8 ms' });
+
+// Simulate different performance profiles for devices
+const getDeviceData = (name: string) => {
+    // "Secure" or "Modern" devices get better stats
+    if (name.includes('Dev-C') || name.includes('Secure')) {
+        return { standard: [135, 0.9, 65], custom: [980, 5.8, 100], latencyStd: '11.2 ms', latencyCust: '0.6 ms' };
+    }
+    // "Legacy" devices show bigger gap or lower base
+    return { standard: [90, 0.6, 50], custom: [850, 4.2, 95], latencyStd: '18.2 ms', latencyCust: '1.2 ms' };
+};
+
+const updateChart = () => {
+    stats.value = getDeviceData(props.deviceName);
+    if (!chartInstance) return;
+
+    chartInstance.setOption({
+        series: [
+            { data: stats.value.standard },
+            { data: stats.value.custom }
+        ]
+    });
+};
+
+watch(() => props.deviceName, updateChart);
 
 onMounted(() => {
+    stats.value = getDeviceData(props.deviceName);
+
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');
 
         const option = {
             title: {
-                text: 'Performance Analysis',
-                left: 'center'
+                text: 'Cryptographic Performance Analysis',
+                left: 'center',
+                textStyle: { color: '#eee' }
             },
             tooltip: {
                 trigger: 'axis',
-                axisPointer: {
-                    type: 'shadow'
-                }
+                axisPointer: { type: 'shadow' }
             },
             legend: {
-                data: ['Standard', 'Custom RISC-V'],
+                data: ['Standard / Software', 'RISC-V Crypto Extension'],
                 top: 30,
-                textStyle: { color: "#ccc" }
+                textStyle: { color: "#9ca3af" }
             },
             grid: {
                 left: '3%',
@@ -34,25 +64,28 @@ onMounted(() => {
             xAxis: {
                 type: 'value',
                 boundaryGap: [0, 0.01],
-                axisLabel: { color: "#ccc" }
+                axisLabel: { color: "#9ca3af" },
+                splitLine: { lineStyle: { color: '#374151' } }
             },
             yAxis: {
                 type: 'category',
                 data: ['Throughput (MB/s)', 'Efficiency (Ops/Cycle)', 'Security Score'],
-                axisLabel: { color: "#ccc" }
+                axisLabel: { color: "#d1d5db" }
             },
             series: [
                 {
-                    name: 'Standard',
+                    name: 'Standard / Software',
                     type: 'bar',
-                    data: [120, 0.8, 60],
-                    itemStyle: { color: '#ef4444' }
+                    data: stats.value.standard,
+                    itemStyle: { color: '#ef4444' },
+                    label: { show: true, position: 'right', color: '#fff' }
                 },
                 {
-                    name: 'Custom RISC-V',
+                    name: 'RISC-V Crypto Extension',
                     type: 'bar',
-                    data: [850, 4.2, 95],
-                    itemStyle: { color: '#22c55e' }
+                    data: stats.value.custom,
+                    itemStyle: { color: '#22c55e' },
+                    label: { show: true, position: 'right', color: '#fff' }
                 }
             ],
             backgroundColor: 'transparent'
@@ -78,13 +111,13 @@ onUnmounted(() => {
         <div ref="chartRef" class="w-full flex-1 min-h-[300px]"></div>
 
         <div class="mt-4 grid grid-cols-2 gap-4 text-center">
-            <div class="p-3 bg-gray-900 rounded">
-                <div class="text-xs text-gray-400 uppercase">Avg Latency</div>
-                <div class="text-2xl font-bold text-red-400">12.5 ms</div>
+            <div class="p-3 bg-gray-900 rounded border border-gray-700">
+                <div class="text-xs text-gray-400 uppercase">Avg Latency (Std)</div>
+                <div class="text-2xl font-bold text-red-400">{{ stats.latencyStd }}</div>
             </div>
-            <div class="p-3 bg-gray-900 rounded">
+            <div class="p-3 bg-gray-900 rounded border border-gray-700">
                 <div class="text-xs text-gray-400 uppercase">Avg Latency (Custom)</div>
-                <div class="text-2xl font-bold text-green-400">1.2 ms</div>
+                <div class="text-2xl font-bold text-green-400">{{ stats.latencyCust }}</div>
             </div>
         </div>
     </div>

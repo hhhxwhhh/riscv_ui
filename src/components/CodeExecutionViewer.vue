@@ -15,28 +15,28 @@ watch(() => props.deviceName, () => {
 
 // Mock Data
 const standardInstructions = [
-    'LD      a0, 0(t0)      # Load data',
-    'LI      t1, 0x1234     # Load Key Part 1',
-    'XOR     a0, a0, t1     # Basic XOR',
-    'SLLI    a1, a0, 4      # Shift Left',
-    'SRLI    a2, a0, 2      # Shift Right',
-    'OR      a0, a1, a2     # Mix',
-    'ADD     t2, t2, 1      # Increment Counter',
-    'BNE     t2, t3, loop   # Loop check',
-    'SD      a0, 0(t4)      # Store result',
+    'LD      a0, 0(packet_limit) # Load Packet Header',
+    'LI      t1, 0x1234          # Load IV Checksum',
+    'XOR     a0, a0, t1          # Decrypt Header Byte',
+    'SLLI    a1, a0, 4           # Align Offset',
+    'SRLI    a2, a0, 2           # Mask Bits',
+    'OR      a0, a1, a2          # Extract Length',
+    'ADD     t2, t2, 1           # Increment Byte Ptr',
+    'BNE     t2, payload_len, L1 # Loop Payload',
+    'SD      a0, 0(buffer)       # Store Decrypted Data',
     // Repeat similar pattern to show length
-    'LD      a0, 8(t0)      ',
-    'XOR     a0, a0, t1     ',
-    'SD      a0, 8(t4)      '
+    'LD      a0, 8(packet_limit) ',
+    'XOR     a0, a0, t1          ',
+    'SD      a0, 8(buffer)       '
 ];
 
 const customInstructions = [
-    'LD      a0, 0(t0)      # Load data',
-    'LKEY    k0, 0(t1)      # Load Key to Crypto Reg',
-    'RISCV.ENC a0, a0, k0   # Custom Crypto Instruction',
-    'SD      a0, 0(t4)      # Store result',
-    'ADDI    t0, t0, 8      # Next block',
-    'ADDI    t4, t4, 8      # Next destination'
+    'LD      a0, 0(packet_base)  # Load 64-bit Packet Chunk',
+    'LKEY    k0, 0(secure_mem)   # Load Hardware Key',
+    'RISCV.ENC a0, a0, k0        # HW Decrypt (Single Cycle)',
+    'SD      a0, 0(dma_buffer)   # Direct Store to DMA',
+    'ADDI    t0, t0, 8           # Next Chunk',
+    'ADDI    t4, t4, 8           # Update Buffer Ptr'
 ];
 
 // State

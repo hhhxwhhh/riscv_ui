@@ -43,7 +43,7 @@ const handleNodeSelect = (node: any) => {
 
       <!-- Right: Analysis (1/3 width) -->
       <div class="lg:col-span-1 min-h-[400px]">
-        <DataAnalysis />
+        <DataAnalysis :deviceName="selectedDevice" />
       </div>
     </section>
   </div>
