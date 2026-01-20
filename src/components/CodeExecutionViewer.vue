@@ -49,6 +49,20 @@ const timer = ref<number | null>(null);
 // Simulation Speed (ms per instruction)
 const speed = 500;
 
+// Mock Registers
+const registers = ref({
+    pc: '0x80000000',
+    a0: '0x00000000',
+    t1: '0x12340000',
+    process: 'ENCRYPTION'
+});
+
+const updateRegisters = () => {
+    registers.value.pc = '0x' + (0x80000000 + standardIdx.value * 4).toString(16).padEnd(8, '0');
+    registers.value.a0 = '0x' + Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+    registers.value.t1 = '0x' + Math.floor(Math.random() * 0xffff).toString(16).padStart(8, '0');
+};
+
 const startSimulation = () => {
     if (isRunning.value) return;
     isRunning.value = true;
@@ -57,6 +71,7 @@ const startSimulation = () => {
         // Advance Standard
         standardIdx.value = (standardIdx.value + 1) % standardInstructions.length;
         customIdx.value = (customIdx.value + 1) % customInstructions.length;
+        updateRegisters();
     }, speed);
 };
 
@@ -133,6 +148,27 @@ onUnmounted(() => {
                         {{ line }}
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- CPU Registers Info Panel -->
+        <div
+            class="mt-4 grid grid-cols-4 gap-2 bg-gray-900 p-2 rounded border border-gray-700 font-mono text-xs text-gray-300">
+            <div class="flex flex-col">
+                <span class="text-gray-500">PC (Prog Ctr)</span>
+                <span class="text-yellow-400">{{ registers.pc }}</span>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-gray-500">A0 (Accum)</span>
+                <span class="text-blue-400">{{ registers.a0 }}</span>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-gray-500">T1 (Temp)</span>
+                <span class="text-purple-400">{{ registers.t1 }}</span>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-gray-500">STATUS</span>
+                <span class="text-green-500 font-bold animate-pulse">{{ registers.process }}</span>
             </div>
         </div>
     </div>
