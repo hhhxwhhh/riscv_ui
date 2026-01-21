@@ -7,11 +7,14 @@ const props = defineProps({
     deviceIP: { type: String, default: '192.168.1.101' }
 });
 
+let switchTimer: number | null = null;
+
 // Watch for device changes to simulate context switching
 watch(() => props.deviceName, () => {
     // Reset and restart to give visual feedback of switching context
     resetSimulation();
-    setTimeout(() => startSimulation(), 100);
+    if (switchTimer) window.clearTimeout(switchTimer);
+    switchTimer = window.setTimeout(() => startSimulation(), 100);
 });
 
 // Mock Data
@@ -93,11 +96,12 @@ onMounted(() => {
 
 onUnmounted(() => {
     stopSimulation();
+    if (switchTimer) window.clearTimeout(switchTimer);
 });
 </script>
 
 <template>
-    <div class="card h-full flex flex-col p-4 bg-gray-800 rounded-lg border border-gray-700">
+    <div class="h-full flex flex-col p-4">
         <div class="flex justify-between items-center mb-4">
             <div class="flex flex-col">
                 <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
@@ -130,7 +134,7 @@ onUnmounted(() => {
                 <div class="flex-1 overflow-y-auto font-mono text-sm bg-gray-900 p-2 rounded relative">
                     <div v-for="(line, idx) in standardInstructions" :key="'std-' + idx"
                         class="py-1 px-2 transition-colors duration-200"
-                        :class="{ 'bg-red-900/50 text-white font-bold border-l-2 border-red-500': idx === standardIdx, 'text-gray-400': idx !== standardIdx }">
+                        :class="{ 'bg-red-500/10 text-white font-bold border-l-2 border-red-400': idx === standardIdx, 'text-gray-400': idx !== standardIdx }">
                         <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
                         {{ line }}
                     </div>
@@ -143,7 +147,7 @@ onUnmounted(() => {
                 <div class="flex-1 overflow-y-auto font-mono text-sm bg-gray-900 p-2 rounded relative">
                     <div v-for="(line, idx) in customInstructions" :key="'cust-' + idx"
                         class="py-1 px-2 transition-colors duration-200"
-                        :class="{ 'bg-green-900/50 text-white font-bold border-l-2 border-green-500': idx === customIdx, 'text-gray-400': idx !== customIdx }">
+                        :class="{ 'bg-emerald-500/10 text-white font-bold border-l-2 border-emerald-400': idx === customIdx, 'text-gray-400': idx !== customIdx }">
                         <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
                         {{ line }}
                     </div>

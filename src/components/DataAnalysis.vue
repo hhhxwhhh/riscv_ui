@@ -10,6 +10,13 @@ const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 const stats = ref({ standard: [120, 0.8, 60], custom: [950, 5.5, 99], latencyStd: '12.5 ms', latencyCust: '0.8 ms' });
 
+const theme = {
+    danger: '#ef4444',
+    success: '#34d399',
+    muted: '#9ca3af',
+    grid: '#374151'
+};
+
 // Simulate different performance profiles for devices
 const getDeviceData = (name: string) => {
     // "Secure" - Highest Performance
@@ -49,22 +56,22 @@ onMounted(() => {
 
         const option = {
             title: [
-                { text: 'Throughput (MB/s)', left: 'center', top: '5%', textStyle: { color: '#9ca3af', fontSize: 12 } },
-                { text: 'Security Score', left: 'center', top: '55%', textStyle: { color: '#9ca3af', fontSize: 12 } }
+                { text: 'Throughput (MB/s)', left: 'center', top: '5%', textStyle: { color: theme.muted, fontSize: 12 } },
+                { text: 'Security Score', left: 'center', top: '55%', textStyle: { color: theme.muted, fontSize: 12 } }
             ],
             tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
             legend: {
                 data: ['Software (Std)', 'RISC-V Crypto (HW)'],
                 top: 'bottom',
-                textStyle: { color: "#9ca3af" }
+                textStyle: { color: theme.muted }
             },
             grid: [
                 { top: '15%', bottom: '55%', left: '15%', right: '5%' }, // Top Chart (Bar)
                 { top: '65%', bottom: '15%', left: '15%', right: '5%' }  // Bottom Chart (Bar)
             ],
             xAxis: [
-                { type: 'value', gridIndex: 0, axisLabel: { color: "#9ca3af" }, splitLine: { lineStyle: { color: '#374151' } } },
-                { type: 'value', gridIndex: 1, max: 100, axisLabel: { color: "#9ca3af" }, splitLine: { lineStyle: { color: '#374151' } } }
+                { type: 'value', gridIndex: 0, axisLabel: { color: theme.muted }, splitLine: { lineStyle: { color: theme.grid } } },
+                { type: 'value', gridIndex: 1, max: 100, axisLabel: { color: theme.muted }, splitLine: { lineStyle: { color: theme.grid } } }
             ],
             yAxis: [
                 { type: 'category', gridIndex: 0, data: ['Throughput'], axisLabel: { show: false } },
@@ -75,26 +82,26 @@ onMounted(() => {
                 {
                     name: 'Software (Std)', type: 'bar', xAxisIndex: 0, yAxisIndex: 0,
                     data: [stats.value.standard[0]],
-                    itemStyle: { color: '#ef4444' },
+                    itemStyle: { color: theme.danger },
                     label: { show: true, position: 'right', color: '#fff', formatter: '{c} MB/s' }
                 },
                 {
                     name: 'RISC-V Crypto (HW)', type: 'bar', xAxisIndex: 0, yAxisIndex: 0,
                     data: [stats.value.custom[0]],
-                    itemStyle: { color: '#22c55e' },
+                    itemStyle: { color: theme.success },
                     label: { show: true, position: 'right', color: '#fff', formatter: '{c} MB/s' }
                 },
                 // Bottom Chart: Security Score
                 {
                     name: 'Software (Std)', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
                     data: [stats.value.standard[2]], // Index 2 is Score
-                    itemStyle: { color: '#ef4444' },
+                    itemStyle: { color: theme.danger },
                     label: { show: true, position: 'right', color: '#fff', formatter: '{c}/100' }
                 },
                 {
                     name: 'RISC-V Crypto (HW)', type: 'bar', xAxisIndex: 1, yAxisIndex: 1,
                     data: [stats.value.custom[2]],
-                    itemStyle: { color: '#22c55e' },
+                    itemStyle: { color: theme.success },
                     label: { show: true, position: 'right', color: '#fff', formatter: '{c}/100' }
                 }
             ],
@@ -118,7 +125,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="h-full bg-gray-800 rounded-lg p-4 border border-gray-700 shadow-lg flex flex-col">
+    <div class="h-full p-4 flex flex-col">
         <div ref="chartRef" class="w-full flex-1 min-h-[300px]"></div>
 
         <div class="mt-4 grid grid-cols-2 gap-4 text-center">

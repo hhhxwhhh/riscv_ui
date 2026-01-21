@@ -34,8 +34,30 @@ const nodes = ref([
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
 let socket: WebSocket | null = null;
 
-const handleIncomingPacket = (packet: any) => {
+type TelemetryPacket = {
+    source: string;
+    status?: string;
+    [key: string]: unknown;
+};
+
+const blinkTimeouts = new Map<string, number>();
+let renderQueued = false;
+let reconnectTimer: number | null = null;
+let reconnectAttempts = 0;
+let isDisposed = false;
+
+const scheduleRender = () => {
+    if (!chartInstance || !optionBuilder || renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => {
+        renderQueued = false;
+        chartInstance?.setOption(optionBuilder!(selectedNodeName.value));
+    });
+};
+
+const handleIncomingPacket = (packet: TelemetryPacket) => {
     // Expected packet: { source: '192.168.1.101', status: 'active', ... }
+    if (!packet?.source) return;
     const targetNode = nodes.value.find(n => n.value.includes(packet.source));
 
     if (targetNode) {
@@ -43,22 +65,35 @@ const handleIncomingPacket = (packet: any) => {
         targetNode.isBlinking = true;
 
         // Trigger visual update (Highlight ON)
-        if (chartInstance && optionBuilder) {
-            chartInstance.setOption(optionBuilder(selectedNodeName.value));
-        }
+        scheduleRender();
 
-        // Auto-reset after 500ms
-        setTimeout(() => {
+        // Auto-reset after 500ms (replace previous timeout if any)
+        const existing = blinkTimeouts.get(targetNode.name);
+        if (existing) window.clearTimeout(existing);
+        const timeoutId = window.setTimeout(() => {
+            if (isDisposed) return;
             targetNode.isBlinking = false;
-            // Trigger visual update (Highlight OFF)
-            if (chartInstance && optionBuilder) {
-                chartInstance.setOption(optionBuilder(selectedNodeName.value));
-            }
+            scheduleRender();
+            blinkTimeouts.delete(targetNode.name);
         }, 500);
+        blinkTimeouts.set(targetNode.name, timeoutId);
     }
 };
 
+const scheduleReconnect = () => {
+    if (isDisposed) return;
+    if (reconnectTimer) window.clearTimeout(reconnectTimer);
+    const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+    const jitter = Math.floor(Math.random() * 250);
+    const delay = baseDelay + jitter;
+    reconnectTimer = window.setTimeout(() => {
+        reconnectAttempts += 1;
+        startDataListener();
+    }, delay);
+};
+
 const startDataListener = () => {
+    if (isDisposed) return;
     // Clean up existing socket if any
     if (socket) {
         socket.close();
@@ -68,6 +103,7 @@ const startDataListener = () => {
         socket = new WebSocket(WS_URL);
 
         socket.onopen = () => {
+            reconnectAttempts = 0;
             console.log(`Connected to Telemetry Server at ${WS_URL}`);
         };
 
@@ -85,17 +121,31 @@ const startDataListener = () => {
         };
 
         socket.onclose = () => {
-            console.warn('WebSocket closed. Reconnecting in 5s...');
-            setTimeout(startDataListener, 5000);
+            if (isDisposed) return;
+            console.warn('WebSocket closed. Reconnecting...');
+            scheduleReconnect();
         };
     } catch (err) {
         console.error('Failed to confirm WebSocket connection:', err);
+        scheduleReconnect();
     }
 };
 
 const IconsPaths = {
     gateway: gatewaySvgRaw,
     device: deviceSvgRaw
+};
+
+const theme = {
+    primary: '#60a5fa',
+    success: '#34d399',
+    danger: '#ef4444',
+    accent: '#6366f1',
+    warning: '#fbbf24',
+    grid: '#374151',
+    line: '#1e3a8a',
+    lineReturn: '#064e3b',
+    textMuted: '#9ca3af'
 };
 
 const toSvgDataUrl = (svg: string, color: string) => {
@@ -158,7 +208,7 @@ onMounted(() => {
                 subtext: 'Select a device to monitor instruction execution',
                 left: 'center',
                 top: 10,
-                textStyle: { color: '#9ca3af', fontSize: 16 }
+                textStyle: { color: theme.textMuted, fontSize: 16 }
             },
             // Tooltip only for the interaction layer
             tooltip: {
@@ -170,7 +220,7 @@ onMounted(() => {
                     return '';
                 },
                 backgroundColor: 'rgba(31, 41, 55, 0.9)',
-                borderColor: '#374151',
+                borderColor: theme.grid,
                 textStyle: { color: '#f3f4f6' }
             },
             xAxis: { show: false, min: 0, max: 800, type: 'value' as const },
@@ -183,7 +233,7 @@ onMounted(() => {
                     silent: true,
                     coordinateSystem: 'cartesian2d',
                     effect: { show: true, period: 4, trailLength: 0.1, symbol: 'arrow', symbolSize: 6, color: '#60a5fa' },
-                    lineStyle: { color: '#1e3a8a', width: 0, curveness: 0.2 },
+                    lineStyle: { color: theme.line, width: 0, curveness: 0.2 },
                     data: linesData,
                     z: 1
                 },
@@ -193,7 +243,7 @@ onMounted(() => {
                     silent: true,
                     coordinateSystem: 'cartesian2d',
                     effect: { show: true, period: 3, trailLength: 0.3, symbol: 'circle', symbolSize: 4, color: '#34d399' },
-                    lineStyle: { color: '#064e3b', width: 0, curveness: -0.2 },
+                    lineStyle: { color: theme.lineReturn, width: 0, curveness: -0.2 },
                     data: linesDataReturn,
                     z: 1
                 },
@@ -222,10 +272,10 @@ onMounted(() => {
 
                         // Visual Priority: Gateway always Red -> Blinking wins over Selection
                         // If blinking, use Bright Yellow/Orange. If Selected, Green. Default Blue.
-                        let color = isGateway ? '#ef4444' : (isSelected ? '#34d399' : '#60a5fa');
+                        let color = isGateway ? theme.danger : (isSelected ? theme.success : theme.primary);
 
                         if (isBlinking && !isGateway) {
-                            color = '#fbbf24'; // Amber-400 for Highlighting
+                            color = theme.warning; // Highlighting
                         }
 
                         return {
@@ -236,14 +286,14 @@ onMounted(() => {
                             itemStyle: {
                                 color: color,
                                 shadowBlur: isBlinking ? 30 : (isSelected ? 20 : 10),
-                                shadowColor: isBlinking ? '#fbbf24' : (isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)')),
+                                shadowColor: isBlinking ? theme.warning : (isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)')),
                                 borderWidth: isBlinking ? 2 : 0,
                                 borderColor: '#fff'
                             }
                         };
                     }),
                     links: links,
-                    lineStyle: { color: '#374151', width: 2, type: 'dashed', curveness: 0.2 },
+                    lineStyle: { color: theme.grid, width: 2, type: 'dashed', curveness: 0.2 },
                     z: 2
                 },
                 // 4. Interaction Layer (Transparent but clickable)
@@ -260,7 +310,7 @@ onMounted(() => {
                         value: node.value,
                         x: node.x,
                         y: node.y,
-                        symbol: toSvgDataUrl(node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device, '#9ca3af'),
+                        symbol: toSvgDataUrl(node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device, theme.textMuted),
                         symbolSize: node.name === 'Gateway' ? 50 : 40 // Keep shape consistent for hitbox
                     })),
                     z: 10 // Topmost
@@ -280,6 +330,7 @@ onMounted(() => {
         });
 
         window.addEventListener('resize', handleResize);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 });
 
@@ -287,13 +338,28 @@ const handleResize = () => {
     chartInstance?.resize();
 };
 
+const handleVisibilityChange = () => {
+    if (document.hidden) {
+        if (socket) socket.close();
+        return;
+    }
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+        startDataListener();
+    }
+};
+
 onUnmounted(() => {
+    isDisposed = true;
     window.removeEventListener('resize', handleResize);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     chartInstance?.dispose();
     if (socket) {
         socket.close();
         socket = null;
     }
+    if (reconnectTimer) window.clearTimeout(reconnectTimer);
+    blinkTimeouts.forEach((id) => window.clearTimeout(id));
+    blinkTimeouts.clear();
 });
 
 watch(
@@ -306,7 +372,7 @@ watch(
 </script>
 
 <template>
-    <div class="relative w-full h-64 bg-gray-800 rounded-lg shadow-lg border border-gray-700">
+    <div class="relative w-full h-64">
         <!-- Quick Select Buttons (Optional, but kept for accessibility) -->
         <div
             class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 px-2 py-1 rounded-full bg-gray-900/70 border border-gray-700 shadow z-20">
