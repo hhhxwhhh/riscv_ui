@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted, watch } from 'vue';
+import { onMounted, ref, onUnmounted, watch, computed } from 'vue';
 import * as echarts from 'echarts';
+import gatewaySvgRaw from '../svgs/gateway.svg?raw';
+import deviceSvgRaw from '../svgs/computer.svg?raw';
 
 const props = defineProps<{
     modelValue?: string
@@ -13,33 +15,102 @@ let chartInstance: echarts.ECharts | null = null;
 const selectedNodeName = ref(props.modelValue || 'IoT Dev-A');
 let optionBuilder: ((selectedName: string) => echarts.EChartsOption) | null = null;
 
-// Define Nodes Configuration
-const nodes = [
-    { name: 'Gateway', x: 400, y: 300, value: '192.168.1.1 (GW)', category: 'gateway' },
-    { name: 'IoT Dev-A', x: 100, y: 100, value: '192.168.1.101', category: 'device' },
-    { name: 'IoT Dev-B', x: 300, y: 100, value: '192.168.1.102', category: 'device' },
-    { name: 'IoT Dev-C', x: 500, y: 100, value: '192.168.1.103', category: 'device' },
-    { name: 'IoT Dev-D', x: 700, y: 100, value: '192.168.1.104', category: 'device' }
-];
+// Define Nodes Configuration (Made Reactive for Real Data updates)
+// We add 'isBlinking' state to track activity
+const nodes = ref([
+    { name: 'Gateway', x: 400, y: 300, value: '192.168.1.1 (GW)', category: 'gateway', isBlinking: false },
+    { name: 'IoT Dev-A', x: 100, y: 100, value: '192.168.1.101', category: 'device', isBlinking: false },
+    { name: 'IoT Dev-B', x: 300, y: 100, value: '192.168.1.102', category: 'device', isBlinking: false },
+    { name: 'IoT Dev-C', x: 500, y: 100, value: '192.168.1.103', category: 'device', isBlinking: false },
+    { name: 'IoT Dev-D', x: 700, y: 100, value: '192.168.1.104', category: 'device', isBlinking: false }
+]);
 
+// ----------------------------------------------------------------------
+// Real Data Interface
+// ----------------------------------------------------------------------
 
-// Icons (SVG Paths with ViewBox Fix)
-// Note: ECharts scales path to symbolSize. If aspect ratio is wide, scaling might look weird.
-// These icons are from MDI, standard 24x24 box.
+// WebSocket Configuration
+// Use environment variable VITE_WS_URL if available, otherwise fallback to local mock server
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
+let socket: WebSocket | null = null;
+
+const handleIncomingPacket = (packet: any) => {
+    // Expected packet: { source: '192.168.1.101', status: 'active', ... }
+    const targetNode = nodes.value.find(n => n.value.includes(packet.source));
+
+    if (targetNode) {
+        // Activate Blink State
+        targetNode.isBlinking = true;
+
+        // Trigger visual update (Highlight ON)
+        if (chartInstance && optionBuilder) {
+            chartInstance.setOption(optionBuilder(selectedNodeName.value));
+        }
+
+        // Auto-reset after 500ms
+        setTimeout(() => {
+            targetNode.isBlinking = false;
+            // Trigger visual update (Highlight OFF)
+            if (chartInstance && optionBuilder) {
+                chartInstance.setOption(optionBuilder(selectedNodeName.value));
+            }
+        }, 500);
+    }
+};
+
+const startDataListener = () => {
+    // Clean up existing socket if any
+    if (socket) {
+        socket.close();
+    }
+
+    try {
+        socket = new WebSocket(WS_URL);
+
+        socket.onopen = () => {
+            console.log(`Connected to Telemetry Server at ${WS_URL}`);
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleIncomingPacket(data);
+            } catch (err) {
+                console.error('Error parsing telemetry data:', err);
+            }
+        };
+
+        socket.onerror = (err) => {
+            console.error('WebSocket error:', err);
+        };
+
+        socket.onclose = () => {
+            console.warn('WebSocket closed. Reconnecting in 5s...');
+            setTimeout(startDataListener, 5000);
+        };
+    } catch (err) {
+        console.error('Failed to confirm WebSocket connection:', err);
+    }
+};
+
 const IconsPaths = {
-    // Server / Gateway Icon
-    gateway: 'M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8Z',
-    // PC Icon
-    device: 'M20,18H4V6H20M20,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V6C22,4.89 21.11,4 20,4Z'
+    gateway: gatewaySvgRaw,
+    device: deviceSvgRaw
 };
 
-const getSvgSymbol = (path: string, color: string) => {
-    // Encode color to ensure # is handled (though encodeURIComponent handles it)
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="${path}"/></svg>`;
-    return `image://data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+const toSvgDataUrl = (svg: string, color: string) => {
+    const cleaned = svg
+        .replace(/<\?xml[^>]*>/gi, '')
+        .replace(/<!DOCTYPE[^>]*>/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    const withColor = cleaned
+        .replace(/fill="[^"]*"/g, `fill="${color}"`)
+        .replace(/stroke="[^"]*"/g, `stroke="${color}"`);
+    return `image://data:image/svg+xml;utf8,${encodeURIComponent(withColor)}`;
 };
 
-const deviceNodes = nodes.filter(node => node.category === 'device');
+const deviceNodes = computed(() => nodes.value.filter(node => node.category === 'device'));
 
 const applySelection = (name: string) => {
     if (!chartInstance || !optionBuilder) return;
@@ -48,7 +119,7 @@ const applySelection = (name: string) => {
 };
 
 const selectNode = (name: string) => {
-    const node = nodes.find(n => n.name === name);
+    const node = nodes.value.find(n => n.name === name);
     if (!node || node.name === 'Gateway') return;
     selectedNodeName.value = node.name;
     emit('update:modelValue', node.name);
@@ -57,16 +128,18 @@ const selectNode = (name: string) => {
 };
 
 onMounted(() => {
+    startDataListener();
+
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');
 
         // Initial Emit
-        const initialNode = nodes.find(n => n.name === selectedNodeName.value);
+        const initialNode = nodes.value.find(n => n.name === selectedNodeName.value);
         if (initialNode) emit('node-select', initialNode);
 
         // Pre-calculate Maps
         const nodeMap: any = {};
-        nodes.forEach(n => nodeMap[n.name] = [n.x, n.y]);
+        nodes.value.forEach(n => nodeMap[n.name] = [n.x, n.y]);
 
         const links = [
             { source: 'Gateway', target: 'IoT Dev-A' },
@@ -142,22 +215,30 @@ onMounted(() => {
                             ip: { fontSize: 11, color: '#9ca3af', align: 'center', backgroundColor: '#1f2937', padding: [2, 4], borderRadius: 4 }
                         }
                     },
-                    data: nodes.map(node => {
+                    data: nodes.value.map(node => {
                         const isGateway = node.name === 'Gateway';
                         const isSelected = node.name === selectedName;
-                        const color = isGateway ? '#ef4444' : (isSelected ? '#34d399' : '#60a5fa');
+                        const isBlinking = node.isBlinking; // Get blink state
+
+                        // Visual Priority: Gateway always Red -> Blinking wins over Selection
+                        // If blinking, use Bright Yellow/Orange. If Selected, Green. Default Blue.
+                        let color = isGateway ? '#ef4444' : (isSelected ? '#34d399' : '#60a5fa');
+
+                        if (isBlinking && !isGateway) {
+                            color = '#fbbf24'; // Amber-400 for Highlighting
+                        }
 
                         return {
                             ...node,
-                            symbol: getSvgSymbol(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
+                            symbol: toSvgDataUrl(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
                             symbolKeepAspect: true,
-                            symbolSize: isGateway ? 50 : 40,
+                            symbolSize: isGateway ? 50 : (isBlinking ? 45 : 40), // Slight size bump when active
                             itemStyle: {
                                 color: color,
-                                shadowBlur: isSelected ? 20 : 10,
-                                shadowColor: isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)'),
-                                borderWidth: 0,
-                                borderColor: 'transparent'
+                                shadowBlur: isBlinking ? 30 : (isSelected ? 20 : 10),
+                                shadowColor: isBlinking ? '#fbbf24' : (isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)')),
+                                borderWidth: isBlinking ? 2 : 0,
+                                borderColor: '#fff'
                             }
                         };
                     }),
@@ -174,12 +255,12 @@ onMounted(() => {
                     cursor: 'pointer',
                     symbolSize: 60, // Consistent larger hit area
                     itemStyle: { opacity: 0 }, // Invisible
-                    data: nodes.map(node => ({
+                    data: nodes.value.map(node => ({
                         name: node.name,
                         value: node.value,
                         x: node.x,
                         y: node.y,
-                        symbol: 'path://' + (node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device),
+                        symbol: toSvgDataUrl(node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device, '#9ca3af'),
                         symbolSize: node.name === 'Gateway' ? 50 : 40 // Keep shape consistent for hitbox
                     })),
                     z: 10 // Topmost
@@ -209,6 +290,10 @@ const handleResize = () => {
 onUnmounted(() => {
     window.removeEventListener('resize', handleResize);
     chartInstance?.dispose();
+    if (socket) {
+        socket.close();
+        socket = null;
+    }
 });
 
 watch(
