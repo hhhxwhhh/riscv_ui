@@ -137,15 +137,15 @@ const IconsPaths = {
 };
 
 const theme = {
-    primary: '#60a5fa',
+    primary: '#7dd3fc',
     success: '#34d399',
-    danger: '#ef4444',
-    accent: '#6366f1',
+    danger: '#fb7185',
+    accent: '#a78bfa',
     warning: '#fbbf24',
-    grid: '#374151',
-    line: '#1e3a8a',
-    lineReturn: '#064e3b',
-    textMuted: '#9ca3af'
+    grid: '#243047',
+    line: '#1f3b72',
+    lineReturn: '#0f4c3a',
+    textMuted: '#94a3b8'
 };
 
 const toSvgDataUrl = (svg: string, color: string) => {
@@ -232,7 +232,7 @@ onMounted(() => {
                     type: 'lines',
                     silent: true,
                     coordinateSystem: 'cartesian2d',
-                    effect: { show: true, period: 4, trailLength: 0.1, symbol: 'arrow', symbolSize: 6, color: '#60a5fa' },
+                    effect: { show: true, period: 4, trailLength: 0.1, symbol: 'arrow', symbolSize: 6, color: theme.primary },
                     lineStyle: { color: theme.line, width: 0, curveness: 0.2 },
                     data: linesData,
                     z: 1
@@ -242,7 +242,7 @@ onMounted(() => {
                     type: 'lines',
                     silent: true,
                     coordinateSystem: 'cartesian2d',
-                    effect: { show: true, period: 3, trailLength: 0.3, symbol: 'circle', symbolSize: 4, color: '#34d399' },
+                    effect: { show: true, period: 3, trailLength: 0.3, symbol: 'circle', symbolSize: 4, color: theme.success },
                     lineStyle: { color: theme.lineReturn, width: 0, curveness: -0.2 },
                     data: linesDataReturn,
                     z: 1

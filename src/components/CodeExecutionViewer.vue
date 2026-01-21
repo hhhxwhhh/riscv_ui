@@ -105,15 +105,15 @@ onUnmounted(() => {
         <div class="flex justify-between items-center mb-4">
             <div class="flex flex-col">
                 <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
-                    <Cpu class="w-5 h-5 text-blue-400" />
+                    <Cpu class="w-5 h-5 text-sky-400" />
                     Instruction Execution Flow
                 </h2>
                 <div class="text-xs text-gray-400 mt-1">
-                    Monitoring: <span class="text-blue-300 font-bold">{{ deviceName }}</span>
+                    Monitoring: <span class="text-sky-300 font-bold">{{ deviceName }}</span>
                     <span class="mx-1">|</span>
-                    Target IP: <span class="text-gray-500 font-mono">{{ deviceIP }}</span>
+                    Target IP: <span class="text-slate-300 font-mono">{{ deviceIP }}</span>
                     <span class="mx-1">|</span>
-                    Source: <span class="text-red-400">Gateway</span>
+                    Source: <span class="text-rose-300">Gateway</span>
                 </div>
             </div>
             <div class="flex space-x-2">
@@ -129,12 +129,12 @@ onUnmounted(() => {
 
         <div class="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
             <!-- Standard Column -->
-            <div class="flex flex-col border-r border-gray-700 pr-2">
-                <h3 class="text-lg font-semibold text-red-400 mb-2">Standard Instructions</h3>
-                <div class="flex-1 overflow-y-auto font-mono text-sm bg-gray-900 p-2 rounded relative">
+            <div class="flex flex-col border-r border-gray-700/80 pr-2">
+                <h3 class="text-lg font-semibold text-rose-300 mb-2">Standard Instructions</h3>
+                <div class="flex-1 overflow-y-auto font-mono text-sm bg-slate-900/70 p-2 rounded relative">
                     <div v-for="(line, idx) in standardInstructions" :key="'std-' + idx"
                         class="py-1 px-2 transition-colors duration-200"
-                        :class="{ 'bg-red-500/10 text-white font-bold border-l-2 border-red-400': idx === standardIdx, 'text-gray-400': idx !== standardIdx }">
+                        :class="{ 'bg-rose-500/10 text-white font-bold border-l-2 border-rose-400': idx === standardIdx, 'text-slate-400': idx !== standardIdx }">
                         <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
                         {{ line }}
                     </div>
@@ -143,11 +143,11 @@ onUnmounted(() => {
 
             <!-- Custom Column -->
             <div class="flex flex-col pl-2">
-                <h3 class="text-lg font-semibold text-green-400 mb-2">RISC-V Crypto Extension</h3>
-                <div class="flex-1 overflow-y-auto font-mono text-sm bg-gray-900 p-2 rounded relative">
+                <h3 class="text-lg font-semibold text-teal-300 mb-2">RISC-V Crypto Extension</h3>
+                <div class="flex-1 overflow-y-auto font-mono text-sm bg-slate-900/70 p-2 rounded relative">
                     <div v-for="(line, idx) in customInstructions" :key="'cust-' + idx"
                         class="py-1 px-2 transition-colors duration-200"
-                        :class="{ 'bg-emerald-500/10 text-white font-bold border-l-2 border-emerald-400': idx === customIdx, 'text-gray-400': idx !== customIdx }">
+                        :class="{ 'bg-teal-500/10 text-white font-bold border-l-2 border-teal-400': idx === customIdx, 'text-slate-400': idx !== customIdx }">
                         <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
                         {{ line }}
                     </div>
@@ -157,22 +157,22 @@ onUnmounted(() => {
 
         <!-- CPU Registers Info Panel -->
         <div
-            class="mt-4 grid grid-cols-4 gap-2 bg-gray-900 p-2 rounded border border-gray-700 font-mono text-xs text-gray-300">
+            class="mt-4 grid grid-cols-4 gap-2 bg-slate-900/70 p-2 rounded border border-slate-700/60 font-mono text-xs text-gray-300">
             <div class="flex flex-col">
                 <span class="text-gray-500">PC (Prog Ctr)</span>
-                <span class="text-yellow-400">{{ registers.pc }}</span>
+                <span class="text-amber-300">{{ registers.pc }}</span>
             </div>
             <div class="flex flex-col">
                 <span class="text-gray-500">A0 (Accum)</span>
-                <span class="text-blue-400">{{ registers.a0 }}</span>
+                <span class="text-sky-300">{{ registers.a0 }}</span>
             </div>
             <div class="flex flex-col">
                 <span class="text-gray-500">T1 (Temp)</span>
-                <span class="text-purple-400">{{ registers.t1 }}</span>
+                <span class="text-violet-300">{{ registers.t1 }}</span>
             </div>
             <div class="flex flex-col">
                 <span class="text-gray-500">STATUS</span>
-                <span class="text-green-500 font-bold animate-pulse">{{ registers.process }}</span>
+                <span class="text-teal-300 font-bold animate-pulse">{{ registers.process }}</span>
             </div>
         </div>
     </div>

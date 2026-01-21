@@ -11,10 +11,10 @@ let chartInstance: echarts.ECharts | null = null;
 const stats = ref({ standard: [120, 0.8, 60], custom: [950, 5.5, 99], latencyStd: '12.5 ms', latencyCust: '0.8 ms' });
 
 const theme = {
-    danger: '#ef4444',
+    danger: '#fb7185',
     success: '#34d399',
-    muted: '#9ca3af',
-    grid: '#374151'
+    muted: '#94a3b8',
+    grid: '#243047'
 };
 
 // Simulate different performance profiles for devices
@@ -129,13 +129,13 @@ onUnmounted(() => {
         <div ref="chartRef" class="w-full flex-1 min-h-[300px]"></div>
 
         <div class="mt-4 grid grid-cols-2 gap-4 text-center">
-            <div class="p-3 bg-gray-900 rounded border border-gray-700">
-                <div class="text-xs text-gray-400 uppercase">Avg Latency (Std)</div>
-                <div class="text-2xl font-bold text-red-400">{{ stats.latencyStd }}</div>
+            <div class="p-3 bg-slate-900/70 rounded border border-slate-700/60">
+                <div class="text-xs text-slate-400 uppercase">Avg Latency (Std)</div>
+                <div class="text-2xl font-bold text-rose-300">{{ stats.latencyStd }}</div>
             </div>
-            <div class="p-3 bg-gray-900 rounded border border-gray-700">
-                <div class="text-xs text-gray-400 uppercase">Avg Latency (Custom)</div>
-                <div class="text-2xl font-bold text-green-400">{{ stats.latencyCust }}</div>
+            <div class="p-3 bg-slate-900/70 rounded border border-slate-700/60">
+                <div class="text-xs text-slate-400 uppercase">Avg Latency (Custom)</div>
+                <div class="text-2xl font-bold text-teal-300">{{ stats.latencyCust }}</div>
             </div>
         </div>
     </div>

@@ -22,7 +22,7 @@ const handleNodeSelect = (node: any) => {
         <div class="flex items-center justify-between flex-wrap gap-4">
           <div class="flex items-center gap-3">
             <div
-              class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center font-bold shadow-lg">
+              class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-lg">
               R</div>
             <div>
               <h1 class="text-2xl font-bold tracking-wide">RISC-V Security Instruction Demo</h1>
@@ -31,9 +31,9 @@ const handleNodeSelect = (node: any) => {
           </div>
           <div class="flex items-center gap-3">
             <div
-              class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-400/30 text-xs font-semibold breathing-glow">
+              class="px-3 py-1 rounded-full bg-teal-500/10 text-teal-200 border border-teal-400/30 text-xs font-semibold breathing-glow">
               LIVE</div>
-            <div class="text-sm subtle-text">Status: <span class="text-green-400 font-mono">CONNECTED</span>
+            <div class="text-sm subtle-text">Status: <span class="text-emerald-300 font-mono">CONNECTED</span>
             </div>
           </div>
         </div>
@@ -41,18 +41,18 @@ const handleNodeSelect = (node: any) => {
           <transition name="fade-slide" mode="out-in">
             <div :key="selectedDevice" class="panel px-4 py-3">
               <div class="text-xs uppercase subtle-text">Active Device</div>
-              <div class="text-lg font-semibold text-blue-200 mt-1">{{ selectedDevice }}</div>
+              <div class="text-lg font-semibold text-sky-200 mt-1">{{ selectedDevice }}</div>
             </div>
           </transition>
           <transition name="fade-slide" mode="out-in">
             <div :key="selectedDeviceIP" class="panel px-4 py-3">
               <div class="text-xs uppercase subtle-text">Target IP</div>
-              <div class="text-lg font-mono text-gray-200 mt-1">{{ selectedDeviceIP }}</div>
+              <div class="text-lg font-mono text-slate-200 mt-1">{{ selectedDeviceIP }}</div>
             </div>
           </transition>
           <div class="panel px-4 py-3">
             <div class="text-xs uppercase subtle-text">Security Mode</div>
-            <div class="text-lg font-semibold text-emerald-300 mt-1">Crypto Extension Active</div>
+            <div class="text-lg font-semibold text-teal-200 mt-1">Crypto Extension Active</div>
           </div>
         </div>
       </header>
