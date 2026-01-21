@@ -101,8 +101,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="h-full flex flex-col p-4">
-        <div class="flex justify-between items-center mb-4">
+    <div class="h-full flex flex-col p-4 gap-3">
+        <div class="flex justify-between items-center">
             <div class="flex flex-col">
                 <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
                     <Cpu class="w-5 h-5 text-sky-400" />
@@ -116,7 +116,10 @@ onUnmounted(() => {
                     Source: <span class="text-rose-300">Gateway</span>
                 </div>
             </div>
-            <div class="flex space-x-2">
+            <div class="flex items-center gap-2">
+                <div class="px-3 py-1 rounded-full text-xs bg-slate-800/60 border border-slate-700/60 text-slate-300">
+                    Speed: {{ speed }}ms
+                </div>
                 <button @click="isRunning ? stopSimulation() : startSimulation()"
                     class="p-2 rounded hover:bg-gray-700 text-gray-300 transition-colors">
                     <component :is="isRunning ? Pause : Play" class="w-5 h-5" />
@@ -157,7 +160,7 @@ onUnmounted(() => {
 
         <!-- CPU Registers Info Panel -->
         <div
-            class="mt-4 grid grid-cols-4 gap-2 bg-slate-900/70 p-2 rounded border border-slate-700/60 font-mono text-xs text-gray-300">
+            class="grid grid-cols-4 gap-2 bg-slate-900/70 p-2 rounded border border-slate-700/60 font-mono text-xs text-gray-300">
             <div class="flex flex-col">
                 <span class="text-gray-500">PC (Prog Ctr)</span>
                 <span class="text-amber-300">{{ registers.pc }}</span>
@@ -189,7 +192,7 @@ onUnmounted(() => {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #4b5563;
+    background: #334155;
     border-radius: 3px;
 }
 </style>

@@ -148,6 +148,8 @@ const theme = {
     textMuted: '#94a3b8'
 };
 
+const toBase64 = (value: string) => window.btoa(unescape(encodeURIComponent(value)));
+
 const toSvgDataUrl = (svg: string, color: string) => {
     const cleaned = svg
         .replace(/<\?xml[^>]*>/gi, '')
@@ -157,7 +159,7 @@ const toSvgDataUrl = (svg: string, color: string) => {
     const withColor = cleaned
         .replace(/fill="[^"]*"/g, `fill="${color}"`)
         .replace(/stroke="[^"]*"/g, `stroke="${color}"`);
-    return `image://data:image/svg+xml;utf8,${encodeURIComponent(withColor)}`;
+    return `image://data:image/svg+xml;base64,${toBase64(withColor)}`;
 };
 
 const deviceNodes = computed(() => nodes.value.filter(node => node.category === 'device'));
@@ -372,18 +374,225 @@ watch(
 </script>
 
 <template>
-    <div class="relative w-full h-64">
-        <!-- Quick Select Buttons (Optional, but kept for accessibility) -->
-        <div
-            class="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 px-2 py-1 rounded-full bg-gray-900/70 border border-gray-700 shadow z-20">
-            <button v-for="node in deviceNodes" :key="node.name" @click="selectNode(node.name)"
-                class="px-3 py-1 rounded-full text-xs border transition-colors cursor-pointer" :class="selectedNodeName === node.name
-                    ? 'bg-green-500/20 border-green-400 text-green-200'
-                    : 'bg-gray-900/60 border-gray-600 text-gray-300 hover:border-gray-400'">
-                {{ node.name }}
-            </button>
+    <div class="topology-shell">
+        <div class="topology-header">
+            <div>
+                <div class="topology-title">Network Topology</div>
+                <div class="topology-subtitle">实时拓扑与流量脉冲</div>
+            </div>
+            <div class="topology-meta">
+                <div class="meta-pill">Selected: <span class="meta-strong">{{ selectedNodeName }}</span></div>
+                <div class="meta-pill">Devices: <span class="meta-strong">{{ deviceNodes.length }}</span></div>
+            </div>
         </div>
 
-        <div ref="chartRef" class="w-full h-full z-10"></div>
+        <div class="topology-body">
+            <div class="topology-canvas">
+                <div ref="chartRef" class="w-full h-full"></div>
+            </div>
+
+            <div class="topology-side">
+                <div class="side-card">
+                    <div class="side-title">Quick Select</div>
+                    <div class="side-list">
+                        <button v-for="node in deviceNodes" :key="node.name" @click="selectNode(node.name)"
+                            class="side-item" :class="selectedNodeName === node.name ? 'is-active' : ''">
+                            <span>{{ node.name }}</span>
+                            <span class="side-ip">{{ node.value }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="side-card">
+                    <div class="side-title">Legend</div>
+                    <div class="legend-row"><span class="legend-dot legend-primary"></span>Traffic</div>
+                    <div class="legend-row"><span class="legend-dot legend-success"></span>Return</div>
+                    <div class="legend-row"><span class="legend-dot legend-warning"></span>Activity</div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
+
+<style scoped>
+.topology-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+    min-height: 320px;
+}
+
+.topology-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.topology-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.topology-subtitle {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.topology-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.meta-pill {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+.meta-strong {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.topology-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 12px;
+    flex: 1;
+    height: 100%;
+    min-height: 260px;
+}
+
+.topology-canvas {
+    position: relative;
+    height: 100%;
+    min-height: 260px;
+    border-radius: 12px;
+    background: radial-gradient(800px 260px at 50% -40%, rgba(125, 211, 252, 0.12), transparent 60%),
+        rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    overflow: hidden;
+}
+
+.topology-side {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.side-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 12px;
+    padding: 10px;
+}
+
+.side-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+
+.side-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.side-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(2, 6, 23, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    color: #cbd5f5;
+    text-align: left;
+    transition: all 180ms ease;
+}
+
+.side-item:hover {
+    border-color: rgba(125, 211, 252, 0.4);
+    transform: translateY(-1px);
+}
+
+.side-item.is-active {
+    border-color: rgba(45, 212, 191, 0.6);
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.2);
+}
+
+.side-ip {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+}
+
+.legend-primary {
+    background: #7dd3fc;
+}
+
+.legend-success {
+    background: #34d399;
+}
+
+.legend-warning {
+    background: #fbbf24;
+}
+
+@media (max-width: 1024px) {
+    .topology-body {
+        grid-template-columns: 1fr;
+    }
+
+    .topology-side {
+        flex-direction: row;
+    }
+
+    .side-card {
+        flex: 1;
+    }
+
+    .topology-canvas {
+        min-height: 240px;
+    }
+}
+
+@media (max-width: 640px) {
+    .topology-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .topology-side {
+        flex-direction: column;
+    }
+
+    .topology-canvas {
+        min-height: 220px;
+    }
+}
+</style>
