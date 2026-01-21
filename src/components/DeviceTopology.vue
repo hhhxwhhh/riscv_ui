@@ -16,9 +16,10 @@ let optionBuilder: ((selectedName: string) => echarts.EChartsOption) | null = nu
 // Define Nodes Configuration
 const nodes = [
     { name: 'Gateway', x: 400, y: 300, value: '192.168.1.1 (GW)', category: 'gateway' },
-    { name: 'IoT Dev-A', x: 150, y: 100, value: '192.168.1.101', category: 'device' },
-    { name: 'IoT Dev-B', x: 400, y: 100, value: '192.168.1.102', category: 'device' },
-    { name: 'IoT Dev-C', x: 650, y: 100, value: '192.168.1.103', category: 'device' }
+    { name: 'IoT Dev-A', x: 100, y: 100, value: '192.168.1.101', category: 'device' },
+    { name: 'IoT Dev-B', x: 300, y: 100, value: '192.168.1.102', category: 'device' },
+    { name: 'IoT Dev-C', x: 500, y: 100, value: '192.168.1.103', category: 'device' },
+    { name: 'IoT Dev-D', x: 700, y: 100, value: '192.168.1.104', category: 'device' }
 ];
 
 
@@ -70,7 +71,8 @@ onMounted(() => {
         const links = [
             { source: 'Gateway', target: 'IoT Dev-A' },
             { source: 'Gateway', target: 'IoT Dev-B' },
-            { source: 'Gateway', target: 'IoT Dev-C' }
+            { source: 'Gateway', target: 'IoT Dev-C' },
+            { source: 'Gateway', target: 'IoT Dev-D' }
         ];
 
         // Lines Data for animation
