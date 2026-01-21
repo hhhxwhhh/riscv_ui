@@ -21,6 +21,23 @@ const nodes = [
     { name: 'IoT Dev-C', x: 650, y: 100, value: '192.168.1.103', category: 'device' }
 ];
 
+
+// Icons (SVG Paths with ViewBox Fix)
+// Note: ECharts scales path to symbolSize. If aspect ratio is wide, scaling might look weird.
+// These icons are from MDI, standard 24x24 box.
+const IconsPaths = {
+    // Server / Gateway Icon
+    gateway: 'M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8Z',
+    // PC Icon
+    device: 'M20,18H4V6H20M20,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V6C22,4.89 21.11,4 20,4Z'
+};
+
+const getSvgSymbol = (path: string, color: string) => {
+    // Encode color to ensure # is handled (though encodeURIComponent handles it)
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}"><path d="${path}"/></svg>`;
+    return `image://data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
+
 const deviceNodes = nodes.filter(node => node.category === 'device');
 
 const applySelection = (name: string) => {
@@ -124,21 +141,22 @@ onMounted(() => {
                         }
                     },
                     data: nodes.map(node => {
-                        const isSelected = node.name === selectedName;
                         const isGateway = node.name === 'Gateway';
+                        const isSelected = node.name === selectedName;
+                        const color = isGateway ? '#ef4444' : (isSelected ? '#34d399' : '#60a5fa');
+
                         return {
                             ...node,
+                            symbol: getSvgSymbol(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
+                            symbolKeepAspect: true,
+                            symbolSize: isGateway ? 50 : 40,
                             itemStyle: {
-                                color: isGateway ?
-                                    { type: 'radial', x: 0.5, y: 0.5, r: 0.5, colorStops: [{ offset: 0, color: '#f87171' }, { offset: 1, color: '#991b1b' }] } :
-                                    { type: 'radial', x: 0.5, y: 0.5, r: 0.5, colorStops: [{ offset: 0, color: isSelected ? '#34d399' : '#60a5fa' }, { offset: 1, color: isSelected ? '#059669' : '#1e3a8a' }] },
-                                shadowBlur: isSelected ? 25 : 15,
+                                color: color,
+                                shadowBlur: isSelected ? 20 : 10,
                                 shadowColor: isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)'),
-                                borderWidth: isSelected ? 2 : 0,
-                                borderColor: '#fff'
-                            },
-                            symbol: isGateway ? 'roundRect' : 'circle',
-                            symbolSize: isGateway ? [80, 50] : (isSelected ? 55 : 45)
+                                borderWidth: 0,
+                                borderColor: 'transparent'
+                            }
                         };
                     }),
                     links: links,
@@ -152,15 +170,15 @@ onMounted(() => {
                     coordinateSystem: 'cartesian2d',
                     layout: 'none',
                     cursor: 'pointer',
-                    symbolSize: 70, // Slightly larger hit area
+                    symbolSize: 60, // Consistent larger hit area
                     itemStyle: { opacity: 0 }, // Invisible
                     data: nodes.map(node => ({
                         name: node.name,
                         value: node.value,
                         x: node.x,
                         y: node.y,
-                        symbol: node.name === 'Gateway' ? 'roundRect' : 'circle',
-                        symbolSize: node.name === 'Gateway' ? [80, 50] : 60
+                        symbol: 'path://' + (node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device),
+                        symbolSize: node.name === 'Gateway' ? 50 : 40 // Keep shape consistent for hitbox
                     })),
                     z: 10 // Topmost
                 }
