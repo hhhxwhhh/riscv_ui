@@ -8,7 +8,7 @@ const props = defineProps<{
     modelValue?: string
 }>();
 
-const emit = defineEmits(['update:modelValue', 'node-select']);
+const emit = defineEmits(['update:modelValue', 'node-select', 'ws-status', 'ws-last-message']);
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
@@ -56,6 +56,7 @@ const scheduleRender = () => {
 };
 
 const handleIncomingPacket = (packet: TelemetryPacket) => {
+    emit('ws-last-message', Date.now());
     // Expected packet: { source: '192.168.1.101', status: 'active', ... }
     if (!packet?.source) return;
     const targetNode = nodes.value.find(n => n.value.includes(packet.source));
@@ -94,6 +95,7 @@ const scheduleReconnect = () => {
 
 const startDataListener = () => {
     if (isDisposed) return;
+    emit('ws-status', 'connecting');
     // Clean up existing socket if any
     if (socket) {
         socket.close();
@@ -104,6 +106,7 @@ const startDataListener = () => {
 
         socket.onopen = () => {
             reconnectAttempts = 0;
+            emit('ws-status', 'connected');
             console.log(`Connected to Telemetry Server at ${WS_URL}`);
         };
 
@@ -117,15 +120,18 @@ const startDataListener = () => {
         };
 
         socket.onerror = (err) => {
+            emit('ws-status', 'disconnected');
             console.error('WebSocket error:', err);
         };
 
         socket.onclose = () => {
             if (isDisposed) return;
+            emit('ws-status', 'disconnected');
             console.warn('WebSocket closed. Reconnecting...');
             scheduleReconnect();
         };
     } catch (err) {
+        emit('ws-status', 'disconnected');
         console.error('Failed to confirm WebSocket connection:', err);
         scheduleReconnect();
     }
@@ -362,6 +368,7 @@ onUnmounted(() => {
     if (reconnectTimer) window.clearTimeout(reconnectTimer);
     blinkTimeouts.forEach((id) => window.clearTimeout(id));
     blinkTimeouts.clear();
+    emit('ws-status', 'disconnected');
 });
 
 watch(

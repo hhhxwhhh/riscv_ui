@@ -6,11 +6,21 @@ import DataAnalysis from './components/DataAnalysis.vue';
 
 const selectedDevice = ref('IoT Dev-A');
 const selectedDeviceIP = ref('192.168.1.101');
+const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
+const lastMessageAt = ref<number | null>(null);
 const handleNodeSelect = (node: any) => {
   if (node.name !== 'Gateway') {
     selectedDevice.value = node.name;
     selectedDeviceIP.value = node.value;
   }
+};
+
+const handleWsStatus = (status: 'connecting' | 'connected' | 'disconnected') => {
+  wsStatus.value = status;
+};
+
+const handleWsLastMessage = (timestamp: number) => {
+  lastMessageAt.value = timestamp;
 };
 </script>
 
@@ -33,7 +43,21 @@ const handleNodeSelect = (node: any) => {
             <div
               class="px-3 py-1 rounded-full bg-teal-500/10 text-teal-200 border border-teal-400/30 text-xs font-semibold breathing-glow">
               LIVE</div>
-            <div class="text-sm subtle-text">Status: <span class="text-emerald-300 font-mono">CONNECTED</span>
+            <div class="text-sm subtle-text">
+              Status:
+              <span class="font-mono" :class="wsStatus === 'connected'
+                ? 'text-emerald-300'
+                : wsStatus === 'connecting'
+                  ? 'text-amber-300'
+                  : 'text-rose-300'">
+                {{ wsStatus.toUpperCase() }}
+              </span>
+            </div>
+            <div class="text-sm subtle-text">
+              Last Msg:
+              <span class="text-slate-200 font-mono">
+                {{ lastMessageAt ? new Date(lastMessageAt).toLocaleTimeString() : '--' }}
+              </span>
             </div>
           </div>
         </div>
@@ -59,7 +83,8 @@ const handleNodeSelect = (node: any) => {
 
       <!-- Top Section: Topology -->
       <section class="flex-none panel panel-glow p-4">
-        <DeviceTopology @node-select="handleNodeSelect" v-model="selectedDevice" />
+        <DeviceTopology @node-select="handleNodeSelect" @ws-status="handleWsStatus"
+          @ws-last-message="handleWsLastMessage" v-model="selectedDevice" />
       </section>
 
       <!-- Bottom Section: Execution & Analysis -->
