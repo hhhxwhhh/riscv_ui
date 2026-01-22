@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { fetchJson } from './api/client';
 import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
@@ -10,6 +11,7 @@ const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number } | null>(null);
 const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
+const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const handleNodeSelect = (node: any) => {
@@ -39,10 +41,9 @@ const handleTelemetry = (packet: any) => {
 
 const loadDevices = async () => {
   try {
-    const res = await fetch(`${apiBase}/api/devices`);
-    if (!res.ok) return;
-    const data = await res.json();
-    devices.value = (data || []).map((item: any) => ({
+    apiStatus.value = 'loading';
+    const data = await fetchJson<Array<{ id?: string; name: string; ip: string }>>(`${apiBase}/api/devices`);
+    devices.value = (data || []).map((item) => ({
       id: item.id,
       name: item.name,
       ip: item.ip
@@ -54,16 +55,15 @@ const loadDevices = async () => {
         selectedDeviceIP.value = firstDevice.ip;
       }
     }
+    apiStatus.value = 'ready';
   } catch {
-    // ignore
+    apiStatus.value = 'error';
   }
 };
 
 const loadMetrics = async () => {
   try {
-    const res = await fetch(`${apiBase}/api/metrics`);
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await fetchJson<{ throughput?: number; latency?: number; securityScore?: number }>(`${apiBase}/api/metrics`);
     latestMetrics.value = {
       throughput: Number(data.throughput ?? 0),
       latency: Number(data.latency ?? 0),
@@ -99,6 +99,15 @@ onMounted(() => {
             <div
               class="px-3 py-1 rounded-full bg-teal-500/10 text-teal-200 border border-teal-400/30 text-xs font-semibold breathing-glow">
               LIVE</div>
+            <div class="px-3 py-1 rounded-full text-xs font-semibold border" :class="apiStatus === 'ready'
+              ? 'bg-emerald-500/10 text-emerald-200 border-emerald-400/30'
+              : apiStatus === 'loading'
+                ? 'bg-amber-500/10 text-amber-200 border-amber-400/30'
+                : apiStatus === 'error'
+                  ? 'bg-rose-500/10 text-rose-200 border-rose-400/30'
+                  : 'bg-slate-500/10 text-slate-200 border-slate-400/30'">
+              API: {{ apiStatus.toUpperCase() }}
+            </div>
             <div class="text-sm subtle-text">
               Status:
               <span class="font-mono" :class="wsStatus === 'connected'
