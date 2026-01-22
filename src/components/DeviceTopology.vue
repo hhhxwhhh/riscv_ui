@@ -4,11 +4,19 @@ import * as echarts from 'echarts';
 import gatewaySvgRaw from '../svgs/gateway.svg?raw';
 import deviceSvgRaw from '../svgs/computer.svg?raw';
 
+type DeviceInfo = {
+    id?: string;
+    name: string;
+    ip: string;
+    status?: string;
+};
+
 const props = defineProps<{
-    modelValue?: string
+    modelValue?: string;
+    devices?: DeviceInfo[]
 }>();
 
-const emit = defineEmits(['update:modelValue', 'node-select', 'ws-status', 'ws-last-message']);
+const emit = defineEmits(['update:modelValue', 'node-select', 'ws-status', 'ws-last-message', 'telemetry']);
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
@@ -17,13 +25,43 @@ let optionBuilder: ((selectedName: string) => echarts.EChartsOption) | null = nu
 
 // Define Nodes Configuration (Made Reactive for Real Data updates)
 // We add 'isBlinking' state to track activity
-const nodes = ref([
-    { name: 'Gateway', x: 400, y: 300, value: '192.168.1.1 (GW)', category: 'gateway', isBlinking: false },
-    { name: 'IoT Dev-A', x: 100, y: 100, value: '192.168.1.101', category: 'device', isBlinking: false },
-    { name: 'IoT Dev-B', x: 300, y: 100, value: '192.168.1.102', category: 'device', isBlinking: false },
-    { name: 'IoT Dev-C', x: 500, y: 100, value: '192.168.1.103', category: 'device', isBlinking: false },
-    { name: 'IoT Dev-D', x: 700, y: 100, value: '192.168.1.104', category: 'device', isBlinking: false }
-]);
+const nodes = ref<{ name: string; x: number; y: number; value: string; category: string; isBlinking: boolean }[]>([]);
+
+const devicePositions = [
+    { x: 100, y: 100 },
+    { x: 300, y: 100 },
+    { x: 500, y: 100 },
+    { x: 700, y: 100 }
+];
+
+const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
+    const previousBlink = new Map(nodes.value.map((node) => [node.name, node.isBlinking]));
+    const deviceList = (devices && devices.length)
+        ? devices
+        : [
+            { name: 'IoT Dev-A', ip: '192.168.1.101' },
+            { name: 'IoT Dev-B', ip: '192.168.1.102' },
+            { name: 'IoT Dev-C', ip: '192.168.1.103' },
+            { name: 'IoT Dev-D', ip: '192.168.1.104' }
+        ];
+
+    const gateway = { name: 'Gateway', x: 400, y: 300, value: '192.168.1.1 (GW)', category: 'gateway', isBlinking: false };
+    const deviceNodes = deviceList.map((device, index) => {
+        const pos = devicePositions[index % devicePositions.length] ?? { x: 0, y: 0 };
+        return {
+            name: device.name,
+            x: pos.x,
+            y: pos.y,
+            value: device.ip,
+            category: 'device',
+            isBlinking: previousBlink.get(device.name) || false
+        };
+    });
+
+    nodes.value = [gateway, ...deviceNodes];
+};
+
+buildNodesFromDevices(props.devices);
 
 // ----------------------------------------------------------------------
 // Real Data Interface
@@ -57,6 +95,7 @@ const scheduleRender = () => {
 
 const handleIncomingPacket = (packet: TelemetryPacket) => {
     emit('ws-last-message', Date.now());
+    emit('telemetry', packet);
     // Expected packet: { source: '192.168.1.101', status: 'active', ... }
     if (!packet?.source) return;
     const targetNode = nodes.value.find(n => n.value.includes(packet.source));
@@ -195,137 +234,147 @@ onMounted(() => {
         const initialNode = nodes.value.find(n => n.name === selectedNodeName.value);
         if (initialNode) emit('node-select', initialNode);
 
-        // Pre-calculate Maps
-        const nodeMap: any = {};
-        nodes.value.forEach(n => nodeMap[n.name] = [n.x, n.y]);
+        const getOption = (selectedName: string): echarts.EChartsOption => {
+            const nodeMap: Record<string, [number, number]> = {};
+            nodes.value.forEach(n => nodeMap[n.name] = [n.x, n.y]);
+            const links = nodes.value
+                .filter(node => node.category === 'device')
+                .map(node => ({ source: 'Gateway', target: node.name }));
 
-        const links = [
-            { source: 'Gateway', target: 'IoT Dev-A' },
-            { source: 'Gateway', target: 'IoT Dev-B' },
-            { source: 'Gateway', target: 'IoT Dev-C' },
-            { source: 'Gateway', target: 'IoT Dev-D' }
-        ];
+            const linesData = links
+                .map(link => {
+                    const source = nodeMap[link.source];
+                    const target = nodeMap[link.target];
+                    if (!source || !target) return null;
+                    return { coords: [source, target] };
+                })
+                .filter((item): item is { coords: [number, number][] } => Boolean(item));
+            const linesDataReturn = links
+                .map(link => {
+                    const source = nodeMap[link.target];
+                    const target = nodeMap[link.source];
+                    if (!source || !target) return null;
+                    return { coords: [source, target] };
+                })
+                .filter((item): item is { coords: [number, number][] } => Boolean(item));
 
-        // Lines Data for animation
-        const linesData = links.map(link => ({ coords: [nodeMap[link.source], nodeMap[link.target]] }));
-        const linesDataReturn = links.map(link => ({ coords: [nodeMap[link.target], nodeMap[link.source]] }));
-
-        const getOption = (selectedName: string): echarts.EChartsOption => ({
-            title: {
-                text: 'Network Topology & Traffic Monitor',
-                subtext: 'Select a device to monitor instruction execution',
-                left: 'center',
-                top: 10,
-                textStyle: { color: theme.textMuted, fontSize: 16 }
-            },
-            // Tooltip only for the interaction layer
-            tooltip: {
-                trigger: 'item' as const,
-                formatter: (params: any) => {
-                    if (params.seriesName === 'InteractionLayer') {
-                        return `<div class="font-bold">${params.name}</div><div>IP: ${params.value}</div>`;
-                    }
-                    return '';
+            return {
+                title: {
+                    text: 'Network Topology & Traffic Monitor',
+                    subtext: 'Select a device to monitor instruction execution',
+                    left: 'center',
+                    top: 10,
+                    textStyle: { color: theme.textMuted, fontSize: 16 }
                 },
-                backgroundColor: 'rgba(31, 41, 55, 0.9)',
-                borderColor: theme.grid,
-                textStyle: { color: '#f3f4f6' }
-            },
-            xAxis: { show: false, min: 0, max: 800, type: 'value' as const },
-            yAxis: { show: false, min: 0, max: 400, type: 'value' as const },
-            grid: { top: 40, bottom: 20, left: 20, right: 20 },
-            series: [
-                // 1. Traffic Lines (Background) - Silent
-                {
-                    type: 'lines',
-                    silent: true,
-                    coordinateSystem: 'cartesian2d',
-                    effect: { show: true, period: 4, trailLength: 0.1, symbol: 'arrow', symbolSize: 6, color: theme.primary },
-                    lineStyle: { color: theme.line, width: 0, curveness: 0.2 },
-                    data: linesData,
-                    z: 1
-                },
-                // 2. Return Traffic - Silent
-                {
-                    type: 'lines',
-                    silent: true,
-                    coordinateSystem: 'cartesian2d',
-                    effect: { show: true, period: 3, trailLength: 0.3, symbol: 'circle', symbolSize: 4, color: theme.success },
-                    lineStyle: { color: theme.lineReturn, width: 0, curveness: -0.2 },
-                    data: linesDataReturn,
-                    z: 1
-                },
-                // 3. Visual Layer (The visible nodes and connections) - Silent to prevent blocking
-                {
-                    type: 'graph',
-                    coordinateSystem: 'cartesian2d',
-                    layout: 'none',
-                    silent: true, // Make visual layer silent so Interaction Layer takes all events
-                    symbolSize: 60,
-                    roam: false,
-                    label: {
-                        show: true,
-                        position: 'bottom',
-                        color: '#d1d5db',
-                        formatter: '{name|{b}}\n{ip|IP: {c}}',
-                        rich: {
-                            name: { fontSize: 13, fontWeight: 'bold', color: '#e5e7eb', padding: [0, 0, 4, 0], align: 'center' },
-                            ip: { fontSize: 11, color: '#9ca3af', align: 'center', backgroundColor: '#1f2937', padding: [2, 4], borderRadius: 4 }
+                // Tooltip only for the interaction layer
+                tooltip: {
+                    trigger: 'item' as const,
+                    formatter: (params: any) => {
+                        if (params.seriesName === 'InteractionLayer') {
+                            return `<div class="font-bold">${params.name}</div><div>IP: ${params.value}</div>`;
                         }
+                        return '';
                     },
-                    data: nodes.value.map(node => {
-                        const isGateway = node.name === 'Gateway';
-                        const isSelected = node.name === selectedName;
-                        const isBlinking = node.isBlinking; // Get blink state
-
-                        // Visual Priority: Gateway always Red -> Blinking wins over Selection
-                        // If blinking, use Bright Yellow/Orange. If Selected, Green. Default Blue.
-                        let color = isGateway ? theme.danger : (isSelected ? theme.success : theme.primary);
-
-                        if (isBlinking && !isGateway) {
-                            color = theme.warning; // Highlighting
-                        }
-
-                        return {
-                            ...node,
-                            symbol: toSvgDataUrl(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
-                            symbolKeepAspect: true,
-                            symbolSize: isGateway ? 50 : (isBlinking ? 45 : 40), // Slight size bump when active
-                            itemStyle: {
-                                color: color,
-                                shadowBlur: isBlinking ? 30 : (isSelected ? 20 : 10),
-                                shadowColor: isBlinking ? theme.warning : (isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)')),
-                                borderWidth: isBlinking ? 2 : 0,
-                                borderColor: '#fff'
-                            }
-                        };
-                    }),
-                    links: links,
-                    lineStyle: { color: theme.grid, width: 2, type: 'dashed', curveness: 0.2 },
-                    z: 2
+                    backgroundColor: 'rgba(31, 41, 55, 0.9)',
+                    borderColor: theme.grid,
+                    textStyle: { color: '#f3f4f6' }
                 },
-                // 4. Interaction Layer (Transparent but clickable)
-                {
-                    name: 'InteractionLayer',
-                    type: 'graph',
-                    coordinateSystem: 'cartesian2d',
-                    layout: 'none',
-                    cursor: 'pointer',
-                    symbolSize: 60, // Consistent larger hit area
-                    itemStyle: { opacity: 0 }, // Invisible
-                    data: nodes.value.map(node => ({
-                        name: node.name,
-                        value: node.value,
-                        x: node.x,
-                        y: node.y,
-                        symbol: toSvgDataUrl(node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device, theme.textMuted),
-                        symbolSize: node.name === 'Gateway' ? 50 : 40 // Keep shape consistent for hitbox
-                    })),
-                    z: 10 // Topmost
-                }
-            ],
-            backgroundColor: 'transparent'
-        });
+                xAxis: { show: false, min: 0, max: 800, type: 'value' as const },
+                yAxis: { show: false, min: 0, max: 400, type: 'value' as const },
+                grid: { top: 40, bottom: 20, left: 20, right: 20 },
+                series: [
+                    // 1. Traffic Lines (Background) - Silent
+                    {
+                        type: 'lines',
+                        silent: true,
+                        coordinateSystem: 'cartesian2d',
+                        effect: { show: true, period: 4, trailLength: 0.1, symbol: 'arrow', symbolSize: 6, color: theme.primary },
+                        lineStyle: { color: theme.line, width: 0, curveness: 0.2 },
+                        data: linesData,
+                        z: 1
+                    },
+                    // 2. Return Traffic - Silent
+                    {
+                        type: 'lines',
+                        silent: true,
+                        coordinateSystem: 'cartesian2d',
+                        effect: { show: true, period: 3, trailLength: 0.3, symbol: 'circle', symbolSize: 4, color: theme.success },
+                        lineStyle: { color: theme.lineReturn, width: 0, curveness: -0.2 },
+                        data: linesDataReturn,
+                        z: 1
+                    },
+                    // 3. Visual Layer (The visible nodes and connections) - Silent to prevent blocking
+                    {
+                        type: 'graph',
+                        coordinateSystem: 'cartesian2d',
+                        layout: 'none',
+                        silent: true, // Make visual layer silent so Interaction Layer takes all events
+                        symbolSize: 60,
+                        roam: false,
+                        label: {
+                            show: true,
+                            position: 'bottom',
+                            color: '#d1d5db',
+                            formatter: '{name|{b}}\n{ip|IP: {c}}',
+                            rich: {
+                                name: { fontSize: 13, fontWeight: 'bold', color: '#e5e7eb', padding: [0, 0, 4, 0], align: 'center' },
+                                ip: { fontSize: 11, color: '#9ca3af', align: 'center', backgroundColor: '#1f2937', padding: [2, 4], borderRadius: 4 }
+                            }
+                        },
+                        data: nodes.value.map(node => {
+                            const isGateway = node.name === 'Gateway';
+                            const isSelected = node.name === selectedName;
+                            const isBlinking = node.isBlinking; // Get blink state
+
+                            // Visual Priority: Gateway always Red -> Blinking wins over Selection
+                            // If blinking, use Bright Yellow/Orange. If Selected, Green. Default Blue.
+                            let color = isGateway ? theme.danger : (isSelected ? theme.success : theme.primary);
+
+                            if (isBlinking && !isGateway) {
+                                color = theme.warning; // Highlighting
+                            }
+
+                            return {
+                                ...node,
+                                symbol: toSvgDataUrl(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
+                                symbolKeepAspect: true,
+                                symbolSize: isGateway ? 50 : (isBlinking ? 45 : 40), // Slight size bump when active
+                                itemStyle: {
+                                    color: color,
+                                    shadowBlur: isBlinking ? 30 : (isSelected ? 20 : 10),
+                                    shadowColor: isBlinking ? theme.warning : (isGateway ? 'rgba(239, 68, 68, 0.5)' : (isSelected ? 'rgba(52, 211, 153, 0.8)' : 'rgba(59, 130, 246, 0.5)')),
+                                    borderWidth: isBlinking ? 2 : 0,
+                                    borderColor: '#fff'
+                                }
+                            };
+                        }),
+                        links: links,
+                        lineStyle: { color: theme.grid, width: 2, type: 'dashed', curveness: 0.2 },
+                        z: 2
+                    },
+                    // 4. Interaction Layer (Transparent but clickable)
+                    {
+                        name: 'InteractionLayer',
+                        type: 'graph',
+                        coordinateSystem: 'cartesian2d',
+                        layout: 'none',
+                        cursor: 'pointer',
+                        symbolSize: 60, // Consistent larger hit area
+                        itemStyle: { opacity: 0 }, // Invisible
+                        data: nodes.value.map(node => ({
+                            name: node.name,
+                            value: node.value,
+                            x: node.x,
+                            y: node.y,
+                            symbol: toSvgDataUrl(node.name === 'Gateway' ? IconsPaths.gateway : IconsPaths.device, theme.textMuted),
+                            symbolSize: node.name === 'Gateway' ? 50 : 40 // Keep shape consistent for hitbox
+                        })),
+                        z: 10 // Topmost
+                    }
+                ],
+                backgroundColor: 'transparent'
+            };
+        };
 
         optionBuilder = getOption;
         applySelection(selectedNodeName.value);
@@ -377,6 +426,24 @@ watch(
         if (!next || next === selectedNodeName.value) return;
         applySelection(next);
     }
+);
+
+watch(
+    () => props.devices,
+    (next) => {
+        buildNodesFromDevices(next);
+        const hasSelected = nodes.value.some((node) => node.name === selectedNodeName.value);
+        if (!hasSelected) {
+            const fallback = nodes.value.find((node) => node.category === 'device');
+            if (fallback) {
+                selectedNodeName.value = fallback.name;
+                emit('update:modelValue', fallback.name);
+                emit('node-select', fallback);
+            }
+        }
+        scheduleRender();
+    },
+    { deep: true }
 );
 </script>
 

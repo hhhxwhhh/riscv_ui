@@ -13,8 +13,12 @@ backend/
 ```
 cd backend
 npm install
-npm run dev
+FRONTEND_ORIGIN=http://localhost:5173 npm run dev
 ```
+
+## 环境变量
+- PORT: 后端端口（默认 8080）
+- FRONTEND_ORIGIN: 允许访问的前端地址（逗号分隔）
 
 ## 接口
 - GET /api/devices

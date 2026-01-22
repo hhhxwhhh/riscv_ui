@@ -3,7 +3,17 @@ import cors from "cors";
 import { WebSocketServer } from "ws";
 
 const app = express();
-app.use(cors());
+const frontendOriginEnv =
+  process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:5174";
+const allowedOrigins = frontendOriginEnv.split(",").map((item) => item.trim());
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+  }),
+);
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;

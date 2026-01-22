@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
@@ -8,6 +8,10 @@ const selectedDevice = ref('IoT Dev-A');
 const selectedDeviceIP = ref('192.168.1.101');
 const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
+const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number } | null>(null);
+const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
+
+const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const handleNodeSelect = (node: any) => {
   if (node.name !== 'Gateway') {
     selectedDevice.value = node.name;
@@ -22,6 +26,58 @@ const handleWsStatus = (status: 'connecting' | 'connected' | 'disconnected') => 
 const handleWsLastMessage = (timestamp: number) => {
   lastMessageAt.value = timestamp;
 };
+
+const handleTelemetry = (packet: any) => {
+  if (packet?.metrics) {
+    latestMetrics.value = {
+      throughput: Number(packet.metrics.throughput ?? 0),
+      latency: Number(packet.metrics.latency ?? 0),
+      securityScore: Number(packet.metrics.securityScore ?? 0)
+    };
+  }
+};
+
+const loadDevices = async () => {
+  try {
+    const res = await fetch(`${apiBase}/api/devices`);
+    if (!res.ok) return;
+    const data = await res.json();
+    devices.value = (data || []).map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      ip: item.ip
+    }));
+    if (devices.value.length && !devices.value.find((d) => d.name === selectedDevice.value)) {
+      const firstDevice = devices.value[0];
+      if (firstDevice) {
+        selectedDevice.value = firstDevice.name;
+        selectedDeviceIP.value = firstDevice.ip;
+      }
+    }
+  } catch {
+    // ignore
+  }
+};
+
+const loadMetrics = async () => {
+  try {
+    const res = await fetch(`${apiBase}/api/metrics`);
+    if (!res.ok) return;
+    const data = await res.json();
+    latestMetrics.value = {
+      throughput: Number(data.throughput ?? 0),
+      latency: Number(data.latency ?? 0),
+      securityScore: Number(data.securityScore ?? 0)
+    };
+  } catch {
+    // ignore
+  }
+};
+
+onMounted(() => {
+  loadDevices();
+  loadMetrics();
+});
 </script>
 
 <template>
@@ -84,7 +140,8 @@ const handleWsLastMessage = (timestamp: number) => {
       <!-- Top Section: Topology -->
       <section class="flex-none panel panel-glow p-4">
         <DeviceTopology @node-select="handleNodeSelect" @ws-status="handleWsStatus"
-          @ws-last-message="handleWsLastMessage" v-model="selectedDevice" />
+          @ws-last-message="handleWsLastMessage" @telemetry="handleTelemetry" v-model="selectedDevice"
+          :devices="devices" />
       </section>
 
       <!-- Bottom Section: Execution & Analysis -->
@@ -96,7 +153,7 @@ const handleWsLastMessage = (timestamp: number) => {
 
         <!-- Right: Analysis (1/3 width) -->
         <div class="lg:col-span-1 min-h-[420px] panel panel-glow p-3">
-          <DataAnalysis :deviceName="selectedDevice" />
+          <DataAnalysis :deviceName="selectedDevice" :metrics="latestMetrics" />
         </div>
       </section>
     </div>

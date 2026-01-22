@@ -3,7 +3,8 @@ import { onMounted, ref, onUnmounted, watch } from 'vue';
 import * as echarts from 'echarts';
 
 const props = defineProps({
-    deviceName: { type: String, default: 'IoT Dev-A' }
+    deviceName: { type: String, default: 'IoT Dev-A' },
+    metrics: { type: Object as () => { throughput: number; latency: number; securityScore: number } | null, default: null }
 });
 
 const chartRef = ref<HTMLElement | null>(null);
@@ -32,7 +33,16 @@ const getDeviceData = (name: string) => {
 };
 
 const updateChart = () => {
-    stats.value = getDeviceData(props.deviceName);
+    if (props.metrics) {
+        stats.value = {
+            standard: [120, 0.8, 60],
+            custom: [props.metrics.throughput, 4.2, props.metrics.securityScore],
+            latencyStd: '18.2 ms',
+            latencyCust: `${props.metrics.latency} ms`
+        };
+    } else {
+        stats.value = getDeviceData(props.deviceName);
+    }
     if (!chartInstance) return;
 
     chartInstance.setOption({
@@ -46,6 +56,7 @@ const updateChart = () => {
 };
 
 watch(() => props.deviceName, updateChart);
+watch(() => props.metrics, updateChart);
 
 onMounted(() => {
     stats.value = getDeviceData(props.deviceName);
