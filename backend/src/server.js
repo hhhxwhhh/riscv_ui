@@ -58,34 +58,55 @@ let latestMetrics = {
 
 // REST: devices list
 app.get("/api/devices", (req, res) => {
-  res.json(devices);
+  try {
+    res.json(devices);
+  } catch (err) {
+    console.error("[API] /api/devices error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // REST: metrics
 app.get("/api/metrics", (req, res) => {
-  res.json(latestMetrics);
+  try {
+    res.json(latestMetrics);
+  } catch (err) {
+    console.error("[API] /api/metrics error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // REST: telemetry push (for gateway reporting)
 app.post("/api/telemetry", (req, res) => {
   const payload = req.body || {};
   const now = Date.now();
-
-  if (payload.deviceId) {
-    const dev = devices.find((d) => d.id === payload.deviceId);
-    if (dev) {
-      dev.lastSeen = now;
-      dev.status = payload.status || "online";
-    }
+  // 参数校验
+  if (!payload.deviceId || typeof payload.deviceId !== "string") {
+    console.warn("[API] /api/telemetry: deviceId missing or invalid");
+    res.status(400).json({ error: "deviceId required" });
+    return;
   }
+  if (payload.metrics && typeof payload.metrics !== "object") {
+    console.warn("[API] /api/telemetry: metrics invalid");
+    res.status(400).json({ error: "metrics must be object" });
+    return;
+  }
+
+  const dev = devices.find((d) => d.id === payload.deviceId);
+  if (!dev) {
+    console.warn("[API] /api/telemetry: device not found", payload.deviceId);
+    res.status(404).json({ error: "device not found" });
+    return;
+  }
+  dev.lastSeen = now;
+  dev.status = payload.status || "online";
 
   if (payload.metrics) {
     latestMetrics = { ...latestMetrics, ...payload.metrics };
   }
 
-  // Broadcast to all websocket clients
+  // 广播消息类型细分
   broadcast({ type: "telemetry", ts: now, ...payload });
-
   res.json({ ok: true });
 });
 
@@ -105,16 +126,31 @@ function broadcast(message) {
   });
 }
 
+function broadcastError(errorMsg) {
+  const data = JSON.stringify({ type: "error", message: errorMsg });
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.send(data);
+    }
+  });
+}
+
+// WebSocket连接，细分消息类型和错误处理
 wss.on("connection", (ws) => {
   ws.send(JSON.stringify({ type: "info", message: "connected" }));
 
   ws.on("message", (data) => {
-    // optional: allow gateway to push via WS
     try {
       const payload = JSON.parse(data.toString());
+      // 校验deviceId
+      if (!payload.deviceId || typeof payload.deviceId !== "string") {
+        broadcastError("deviceId required");
+        return;
+      }
       broadcast({ type: "telemetry", ts: Date.now(), ...payload });
-    } catch {
-      // ignore malformed
+    } catch (err) {
+      broadcastError("Malformed message");
+      console.warn("[WS] Malformed message:", err);
     }
   });
 });
