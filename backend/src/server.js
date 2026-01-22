@@ -3,6 +3,23 @@ import cors from "cors";
 import { WebSocketServer } from "ws";
 
 const app = express();
+
+// 日志中间件
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`,
+    );
+  });
+  next();
+});
+
+// 健康检查接口
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
 const frontendOriginEnv =
   process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:5174";
 const allowedOrigins = frontendOriginEnv.split(",").map((item) => item.trim());
@@ -19,6 +36,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 // In-memory data (replace with DB later)
+const DEVICE_OFFLINE_TIMEOUT = 10000; // 10秒未上报视为离线
 const devices = [
   {
     id: "dev-a",
@@ -50,6 +68,27 @@ const devices = [
   },
 ];
 
+// 定时检测设备是否离线
+setInterval(() => {
+  const now = Date.now();
+  devices.forEach((dev) => {
+    if (
+      dev.status === "online" &&
+      now - dev.lastSeen > DEVICE_OFFLINE_TIMEOUT
+    ) {
+      dev.status = "offline";
+      console.log(`[Device] ${dev.name} (${dev.ip}) marked offline`);
+    }
+    if (
+      dev.status === "offline" &&
+      now - dev.lastSeen <= DEVICE_OFFLINE_TIMEOUT
+    ) {
+      dev.status = "online";
+      console.log(`[Device] ${dev.name} (${dev.ip}) back online`);
+    }
+  });
+}, 2000);
+
 let latestMetrics = {
   throughput: 850,
   latency: 1.2,
@@ -59,7 +98,7 @@ let latestMetrics = {
 // REST: devices list
 app.get("/api/devices", (req, res) => {
   try {
-    res.json(devices);
+    res.json(devices.map((d) => ({ ...d })));
   } catch (err) {
     console.error("[API] /api/devices error:", err);
     res.status(500).json({ error: "Internal server error" });
