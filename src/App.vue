@@ -6,8 +6,13 @@ import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
 
-const selectedDevice = ref('IoT Sensor A');
-const selectedDeviceIP = ref('192.168.1.100');
+const selectedDevices = ref<string[]>(['IoT Sensor A']);
+const selectedDeviceIPs = computed(() => {
+  return selectedDevices.value.map(name =>
+    devices.value.find(d => d.name === name)?.ip || ''
+  ).filter(ip => !!ip);
+});
+
 const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
@@ -51,17 +56,11 @@ const toggleSimulation = () => {
 };
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
-const handleNodeSelect = (node: any) => {
-  if (!node || !node.name) {
-    selectedDevice.value = '';
-    selectedDeviceIP.value = '';
-    return;
-  }
 
-  if (node.name !== 'Gateway' && node.name !== 'A100 Gateway') {
-    selectedDevice.value = node.name;
-    selectedDeviceIP.value = node.value || '';
-  }
+const handleNodeSelect = (node: any) => {
+  // Metadata update only - selection is managed by DeviceTopology v-model
+  if (!node || !node.name) return;
+  console.log('Selected Node Metadata:', node);
 };
 
 const handleWsStatus = (status: 'connecting' | 'connected' | 'disconnected') => {
@@ -73,12 +72,18 @@ const handleWsLastMessage = (timestamp: number) => {
 };
 
 const handleTelemetry = (packet: any) => {
+  // Update global metrics or selected device metrics
   if (packet?.metrics) {
-    latestMetrics.value = {
-      throughput: Number(packet.metrics.throughput ?? 0),
-      latency: Number(packet.metrics.latency ?? 0),
-      securityScore: Number(packet.metrics.securityScore ?? 0)
-    };
+    // Filter metrics by any of the selected IPs
+    const isTarget = selectedDeviceIPs.value.length === 0 || selectedDeviceIPs.value.includes(packet.source as string);
+
+    if (isTarget) {
+      latestMetrics.value = {
+        throughput: Number(packet.metrics.throughput ?? 0),
+        latency: Number(packet.metrics.latency ?? 0),
+        securityScore: Number(packet.metrics.securityScore ?? 0)
+      };
+    }
   }
 };
 
@@ -91,11 +96,11 @@ const loadDevices = async () => {
       name: item.name,
       ip: item.ip
     }));
-    if (devices.value.length && !devices.value.find((d) => d.name === selectedDevice.value)) {
+    if (devices.value.length && !selectedDevices.value.length) {
       const firstDevice = devices.value[0];
       if (firstDevice) {
-        selectedDevice.value = firstDevice.name;
-        selectedDeviceIP.value = firstDevice.ip;
+        selectedDevices.value = [firstDevice.name];
+        // selectedDeviceIPs is a computed property; it derives from selectedDevices
       }
     }
     apiStatus.value = 'ready';
@@ -171,15 +176,19 @@ onMounted(() => {
         </div>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <transition name="fade-slide" mode="out-in">
-            <div :key="selectedDevice" class="panel px-4 py-3">
-              <div class="text-xs uppercase subtle-text">Active Device</div>
-              <div class="text-lg font-semibold text-sky-200 mt-1">{{ selectedDevice || 'All Devices' }}</div>
+            <div :key="selectedDevices.join(',')" class="panel px-4 py-3">
+              <div class="text-xs uppercase subtle-text">Active Device(s)</div>
+              <div class="text-lg font-semibold text-sky-200 mt-1 truncate">
+                {{ selectedDevices.length ? selectedDevices.join(' & ') : 'All Devices' }}
+              </div>
             </div>
           </transition>
           <transition name="fade-slide" mode="out-in">
-            <div :key="selectedDeviceIP" class="panel px-4 py-3">
-              <div class="text-xs uppercase subtle-text">Target IP</div>
-              <div class="text-lg font-mono text-slate-200 mt-1">{{ selectedDeviceIP || 'Global Broadcast' }}</div>
+            <div :key="selectedDeviceIPs.join(',')" class="panel px-4 py-3">
+              <div class="text-xs uppercase subtle-text">Target IP(s)</div>
+              <div class="text-lg font-mono text-slate-200 mt-1 truncate">
+                {{ selectedDeviceIPs.length ? selectedDeviceIPs.join(' & ') : 'Global Broadcast' }}
+              </div>
             </div>
           </transition>
           <div class="panel px-4 py-3 border-l-4 border-slate-500/30">
@@ -221,7 +230,7 @@ onMounted(() => {
       <!-- Top Section: Topology -->
       <section class="flex-none panel panel-glow p-4" v-if="currentStage">
         <DeviceTopology @node-select="handleNodeSelect" @ws-status="handleWsStatus"
-          @ws-last-message="handleWsLastMessage" @telemetry="handleTelemetry" v-model="selectedDevice"
+          @ws-last-message="handleWsLastMessage" @telemetry="handleTelemetry" v-model="selectedDevices"
           :devices="devices" :stage="currentStage" />
       </section>
 
@@ -229,12 +238,13 @@ onMounted(() => {
       <section class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4" v-if="currentStage">
         <!-- Left: Code Execution (2/3 width) -->
         <div class="lg:col-span-2 min-h-[420px] panel panel-glow p-3">
-          <CodeExecutionViewer :deviceName="selectedDevice" :deviceIP="selectedDeviceIP" :stage="currentStage" />
+          <CodeExecutionViewer :deviceName="selectedDevices[0] || ''" :deviceIP="selectedDeviceIPs[0] || ''"
+            :stage="currentStage" />
         </div>
 
         <!-- Right: Analysis (1/3 width) -->
         <div class="lg:col-span-1 min-h-[420px] panel panel-glow p-3">
-          <DataAnalysis :deviceName="selectedDevice" :metrics="latestMetrics" :stage="currentStage" />
+          <DataAnalysis :deviceName="selectedDevices[0] || ''" :metrics="latestMetrics" :stage="currentStage" />
         </div>
       </section>
     </div>

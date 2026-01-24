@@ -13,7 +13,7 @@ type DeviceInfo = {
 };
 
 const props = defineProps<{
-    modelValue?: string;
+    modelValue?: string | string[]; // Support array for multi-track
     devices?: DeviceInfo[],
     stage: StageInfo
 }>();
@@ -22,9 +22,14 @@ const emit = defineEmits(['update:modelValue', 'node-select', 'ws-status', 'ws-l
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
-const selectedNodeName = ref(props.modelValue || '');
-const viewMode = ref<'stage' | 'device' | 'all'>('stage'); // stage: global stage for all, etc
-let optionBuilder: ((selectedName: string) => echarts.EChartsOption) | null = null;
+
+// Track multiple selections
+const selectedNodeNames = ref<string[]>(
+    Array.isArray(props.modelValue) ? props.modelValue : (props.modelValue ? [props.modelValue] : [])
+);
+
+const viewMode = ref<'stage' | 'device' | 'all'>('stage');
+let optionBuilder: ((selectedNames: string[]) => echarts.EChartsOption) | null = null;
 
 // Define Nodes Configuration (Made Reactive for Real Data updates)
 // We add 'isBlinking' state to track activity and stageId for individual flow status
@@ -36,6 +41,7 @@ type NodeData = {
     category: string;
     isBlinking: boolean;
     stageId: string;
+    throughput: number; // For traffic variation
     description?: string;
 };
 const nodes = ref<NodeData[]>([]);
@@ -84,6 +90,7 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
         category: 'gateway',
         isBlinking: false,
         stageId: props.stage.id || 'AUTH',
+        throughput: 100,
         description: 'Secure RISC-V Cryptoverse Hub'
     };
 
@@ -96,7 +103,8 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
             value: device.ip,
             category: 'device',
             isBlinking: previousBlink.get(device.name) || false,
-            stageId: stageIds[index % stageIds.length] || 'AUTH'
+            stageId: stageIds[index % stageIds.length] || 'AUTH',
+            throughput: 100 // Default initial throughput
         };
     });
 
@@ -109,7 +117,7 @@ buildNodesFromDevices(props.devices);
 watch(() => props.devices, (newDevices) => {
     buildNodesFromDevices(newDevices);
     if (chartInstance && optionBuilder) {
-        chartInstance.setOption(optionBuilder(selectedNodeName.value));
+        chartInstance.setOption(optionBuilder(selectedNodeNames.value));
     }
 }, { deep: true });
 
@@ -139,33 +147,52 @@ const scheduleRender = () => {
     renderQueued = true;
     requestAnimationFrame(() => {
         renderQueued = false;
-        chartInstance?.setOption(optionBuilder!(selectedNodeName.value));
+        chartInstance?.setOption(optionBuilder!(selectedNodeNames.value));
     });
 };
 
 const handleIncomingPacket = (packet: TelemetryPacket) => {
     emit('ws-last-message', Date.now());
     emit('telemetry', packet);
-    // Expected packet: { source: '192.168.1.101', status: 'active', ... }
+
     if (!packet?.source) return;
     const targetNode = nodes.value.find(n => n.value.includes(packet.source));
 
     if (targetNode) {
+        // Update stage if provided (lifecycle logic)
+        if (packet.stageId && typeof packet.stageId === 'string') {
+            targetNode.stageId = packet.stageId;
+        }
+
+        // Update traffic metrics
+        if (packet.metrics && typeof packet.metrics === 'object') {
+            const m = packet.metrics as any;
+            if (m.throughput) {
+                targetNode.throughput = Number(m.throughput);
+            }
+        }
+
         // Activate Blink State
         targetNode.isBlinking = true;
 
-        // Trigger visual update (Highlight ON)
+        // Trigger visual update
         scheduleRender();
 
-        // Auto-reset after 500ms (replace previous timeout if any)
+        // If it's the last stage, clear its active status after a longer period to show completion
+        // Otherwise, standard 1100ms blink (matches mock-server 1200ms cycle)
+        const clearDelay = packet.isLastStage ? 3000 : 1100;
+
         const existing = blinkTimeouts.get(targetNode.name);
         if (existing) window.clearTimeout(existing);
+
         const timeoutId = window.setTimeout(() => {
             if (isDisposed) return;
             targetNode.isBlinking = false;
+            // Optionally reset throughput to 0 or low value when inactive
+            targetNode.throughput = 0;
             scheduleRender();
             blinkTimeouts.delete(targetNode.name);
-        }, 500);
+        }, clearDelay);
         blinkTimeouts.set(targetNode.name, timeoutId);
     }
 };
@@ -259,24 +286,34 @@ const toSvgDataUrl = (svg: string, color: string) => {
 
 const deviceNodes = computed(() => nodes.value.filter(node => node.category === 'device'));
 
-const applySelection = (name: string) => {
+const applySelection = (names: string[]) => {
     if (!chartInstance || !optionBuilder) return;
-    selectedNodeName.value = name;
-    chartInstance.setOption(optionBuilder(name));
+    selectedNodeNames.value = names;
+    chartInstance.setOption(optionBuilder(names));
 };
 
 const selectNode = (name: string) => {
-    // If clicking same node, deselect it to show full topology
-    const newSelection = selectedNodeName.value === name ? '' : name;
+    if (name === 'Gateway' || name === 'A100 Gateway') return;
 
-    if (newSelection === 'Gateway' || newSelection === 'A100 Gateway') return;
+    let newSelections = [...selectedNodeNames.value];
+    const index = newSelections.indexOf(name);
 
-    selectedNodeName.value = newSelection;
-    emit('update:modelValue', newSelection);
+    if (index > -1) {
+        newSelections.splice(index, 1);
+    } else {
+        // Limit to 2 for direct "A to B" tracking, or 3 for general monitoring
+        if (newSelections.length >= 2) {
+            newSelections.shift(); // Remove oldest
+        }
+        newSelections.push(name);
+    }
 
-    const node = nodes.value.find(n => n.name === newSelection);
-    emit('node-select', node || { name: '', value: '' });
-    applySelection(newSelection);
+    selectedNodeNames.value = newSelections;
+    emit('update:modelValue', newSelections);
+
+    const firstNode = nodes.value.find(n => n.name === newSelections[0]);
+    emit('node-select', firstNode || { name: '', value: '' });
+    applySelection(newSelections);
 };
 
 const getStageContext = (stageId: string) => {
@@ -298,33 +335,33 @@ onMounted(() => {
         chartInstance = echarts.init(chartRef.value, 'dark');
 
         // Initial Emit
-        const initialNode = nodes.value.find(n => n.name === selectedNodeName.value);
+        const initialNode = nodes.value.find(n => selectedNodeNames.value.includes(n.name));
         if (initialNode) emit('node-select', initialNode);
 
-        const getOption = (selectedName: string): echarts.EChartsOption => {
+        const getOption = (selectedNames: string[]): echarts.EChartsOption => {
             const nodeMap: Record<string, [number, number]> = {};
             nodes.value.forEach(n => nodeMap[n.name] = [n.x, n.y]);
 
             const stageIds = ['AUTH', 'ENCRYPT', 'DECRYPT', 'HASH'];
             const linesByStage: Record<string, any[]> = { AUTH: [], ENCRYPT: [], DECRYPT: [], HASH: [] };
 
-            const isGlobal = !selectedName;
+            const isGlobal = selectedNames.length === 0;
+            const isRelayMode = selectedNames.length === 2; // Tracking A to B
 
             nodes.value.forEach(node => {
                 if (node.category === 'gateway') return;
 
-                // Show all devices in global view, or only selected device in focused view
-                if (!isGlobal && node.name !== selectedName) return;
+                // Lifecycle filter: In global view, only show flows for active/blinking devices
+                const isActive = node.isBlinking || node.throughput > 0;
+                const isSelected = selectedNames.includes(node.name);
 
-                // LOGIC REFACTORED:
-                // If viewMode is 'all' AND node is selected, show all 4 stages.
-                // If viewMode is 'all' AND no node selected, show each device's assigned stage.
-                // If viewMode is 'stage', show the global props.stage.id for everything.
+                if (isGlobal && !isActive) return;
+                if (!isGlobal && !isSelected) return;
 
                 let stagesToShow: string[] = [];
                 if (viewMode.value === 'all') {
                     if (!isGlobal) {
-                        stagesToShow = stageIds; // Show full cycle for selected device
+                        stagesToShow = stageIds; // Show full cycle for selected devices
                     } else {
                         stagesToShow = [node.stageId]; // Show distributed stages in global view
                     }
@@ -333,8 +370,7 @@ onMounted(() => {
                 }
 
                 stagesToShow.forEach((sid) => {
-                    // Logic mapping for demo flow directions
-                    const isReverse = (sid === 'AUTH'); // Device -> Gateway
+                    const isReverse = (sid === 'AUTH');
                     const isInternal = (sid === 'DECRYPT' || sid === 'HASH');
 
                     const gatewayNode = nodes.value.find(n => n.category === 'gateway');
@@ -343,25 +379,42 @@ onMounted(() => {
                     let source = node.name;
                     let target = gatewayNode.name;
 
-                    if (!isReverse) { [source, target] = [target, source]; }
+                    // Relay Mode Special Logic: 
+                    // If we have A and B, we want A -> Gateway -> B
+                    if (isRelayMode) {
+                        const [nodeA, nodeB] = selectedNames;
+                        if (sid === 'AUTH' || sid === 'ENCRYPT') {
+                            source = nodeA!; target = gatewayNode.name;
+                        } else {
+                            source = gatewayNode.name; target = nodeB!;
+                        }
+                    } else if (!isReverse) {
+                        [source, target] = [target, source];
+                    }
 
                     const sPos = nodeMap[source];
                     const tPos = nodeMap[target];
 
                     if (sPos && tPos && linesByStage[sid]) {
-                        if (isInternal && !isGlobal) {
+                        const tput = node.throughput || 100;
+                        const flowWidth = 1.5 + (tput / 150);
+                        const flowOpacity = Math.max(0.2, Math.min(1, tput / 1000));
+
+                        if (isInternal && !isGlobal && !isRelayMode) {
                             const gx = gatewayNode.x;
                             const gy = gatewayNode.y;
-                            // Loop effect for internal processing at gateway for focused device
                             linesByStage[sid].push({
-                                coords: [[gx, gy], [gx + 30, gy - 40], [gx + 60, gy], [gx + 30, gy + 40], [gx, gy]]
+                                coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
+                                lineStyle: { width: flowWidth * 1.2, opacity: flowOpacity }
                             });
                         } else {
-                            // Spread concurrent lines out slightly for visible clarity if many stages
                             const curve = isGlobal ? 0.2 : (0.1 + (stageIds.indexOf(sid) * 0.15));
                             linesByStage[sid].push({
                                 coords: [sPos, tPos],
-                                lineStyle: { curveness: curve }
+                                lineStyle: {
+                                    curveness: isRelayMode ? 0.25 : curve,
+                                    opacity: isGlobal ? flowOpacity * 0.7 : flowOpacity
+                                }
                             });
                         }
                     }
@@ -369,7 +422,6 @@ onMounted(() => {
             });
 
             const series: any[] = [];
-            const lineWidth = Math.max(1.5, (props.stage.metrics.throughput / 300));
 
             // 1. Multi-stage Traffic Lines
             stageIds.forEach(sid => {
@@ -377,7 +429,21 @@ onMounted(() => {
                 if (!currentLines || currentLines.length === 0) return;
 
                 const ctx = getStageContext(sid);
-                const isSelectedFlow = !isGlobal && selectedName && currentLines.length > 0;
+
+                let avgTput = 0;
+                if (isGlobal) {
+                    const stageNodes = nodes.value.filter(n => n.stageId === sid || viewMode.value !== 'all');
+                    if (stageNodes.length > 0) {
+                        avgTput = stageNodes.reduce((acc, n) => acc + n.throughput, 0) / stageNodes.length;
+                    }
+                } else {
+                    const selNode = nodes.value.find(n => selectedNames.includes(n.name));
+                    avgTput = selNode?.throughput || 100;
+                }
+
+                // Speed calculation: high throughput = faster particles
+                // Period 2s (fast) to 6s (slow)
+                const effectPeriod = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
 
                 series.push({
                     type: 'lines',
@@ -385,16 +451,16 @@ onMounted(() => {
                     coordinateSystem: 'cartesian2d',
                     effect: {
                         show: true,
-                        period: 4,
+                        period: effectPeriod,
                         trailLength: 0.1,
                         symbol: 'arrow',
-                        symbolSize: lineWidth * (isSelectedFlow ? 4 : 3),
+                        symbolSize: isGlobal ? 3 : 5,
                         color: ctx.color
                     },
                     lineStyle: {
                         color: ctx.color,
-                        width: isSelectedFlow ? lineWidth * 1.5 : lineWidth,
-                        curveness: 0.2, // Default, items might override
+                        width: 1.5,
+                        curveness: 0.2,
                         opacity: isGlobal ? 0.3 : 0.7
                     },
                     data: currentLines,
@@ -418,6 +484,12 @@ onMounted(() => {
                         const isGateway = p.name.includes('Gateway');
                         const deviceNode = nodes.value.find(n => n.name === p.name);
 
+                        // Lifecycle: In global view, labels might be hidden for non-active devices to focus on active ones
+                        const isActive = deviceNode?.isBlinking || (deviceNode?.throughput || 0) > 0;
+                        const isSelected = selectedNames.includes(p.name);
+
+                        if (isGlobal && !isGateway && !isActive) return '';
+
                         // If in Full Cycle mode and no focus, show node's own stage.
                         // If focused, show global stage (or 'Full Cycle' text).
                         const sid = (viewMode.value === 'all' && isGlobal)
@@ -425,20 +497,32 @@ onMounted(() => {
                             : props.stage.id;
 
                         const ctx = getStageContext(sid);
+                        const tput = deviceNode?.throughput ? `${Math.round(deviceNode.throughput)} Mbps` : '';
+
+                        let prefix = '';
+                        if (isRelayMode && isSelected) {
+                            prefix = selectedNames.indexOf(p.name) === 0 ? '【SOURCE】' : '【TARGET】';
+                        }
 
                         if (isGateway) return `{name|${p.name}}\n{stage|${props.stage.id}}`;
-                        return `{name|${p.name}}\n{ip|${p.value}}\n{badge| ${ctx.text} }`;
+                        return `{name|${prefix}${p.name}}\n{ip|${p.value}}\n{tput|${tput}}\n{badge| ${ctx.text} }`;
                     },
                     rich: {
-                        name: { fontSize: 12, fontWeight: 'bold', color: '#e5e7eb', padding: [0, 0, 2, 0], align: 'center' },
-                        ip: { fontSize: 10, color: '#9ca3af', align: 'center', padding: [0, 0, 4, 0] },
+                        name: { fontSize: 11, fontWeight: 'bold', color: '#e5e7eb', padding: [0, 0, 1, 0], align: 'center' },
+                        ip: { fontSize: 9, color: '#9ca3af', align: 'center', padding: [0, 0, 1, 0] },
+                        tput: { fontSize: 9, color: '#7dd3fc', align: 'center', padding: [0, 0, 2, 0], fontWeight: 'bold' },
                         stage: { fontSize: 10, color: '#fff', backgroundColor: theme.danger, padding: [2, 4], borderRadius: 4, fontWeight: 'bold' },
-                        badge: { fontSize: 9, color: '#fff', backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'currentColor', borderWidth: 1, padding: [2, 4], borderRadius: 2 }
+                        badge: { fontSize: 8, color: '#fff', backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'currentColor', borderWidth: 1, padding: [1, 3], borderRadius: 2 }
                     }
                 },
                 data: nodes.value.map(node => {
                     const isGateway = node.name.includes('Gateway');
-                    const isSelected = node.name === selectedName;
+                    const isSelected = selectedNames.includes(node.name);
+
+                    const isActive = node.isBlinking || node.throughput > 0;
+                    // In global view, dim or hide inactive node icons
+                    const opacity = (isGlobal && !isGateway && !isActive) ? 0.2 : 1.0;
+
                     const sid = isSelected ? props.stage.id : node.stageId;
                     const ctx = getStageContext(sid);
 
@@ -450,20 +534,22 @@ onMounted(() => {
                         symbol: toSvgDataUrl(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
                         symbolKeepAspect: true,
                         symbolSize: isGateway ? 55 : (isSelected ? 50 : 35),
-                        label: {
-                            rich: {
-                                badge: { color: color, borderColor: color }
-                            }
-                        },
                         itemStyle: {
+                            opacity: opacity,
                             color: color,
                             shadowBlur: isSelected ? 30 : 5,
                             shadowColor: color + (isSelected ? 'B0' : '40')
+                        },
+                        label: {
+                            show: opacity > 0.3,
+                            rich: {
+                                badge: { color: color, borderColor: color }
+                            }
                         }
                     };
                 }),
                 links: nodes.value
-                    .filter(node => node.category === 'device' && (!selectedName || node.name === selectedName))
+                    .filter(node => node.category === 'device' && (isGlobal || selectedNames.includes(node.name)))
                     .map(node => ({ source: 'A100 Gateway', target: node.name })),
                 lineStyle: { color: 'rgba(255,255,255,0.1)', width: 1, type: 'dashed', curveness: 0.2 },
                 z: 2
@@ -492,8 +578,8 @@ onMounted(() => {
 
             return {
                 title: {
-                    text: 'Multi-Flow Security Stage Monitor',
-                    subtext: selectedName ? `Focus Flow: ${props.stage.flow.label}` : 'Global Network: Multi-Stage Concurrency View',
+                    text: isRelayMode ? 'End-to-End Relay Security Inspection' : 'Multi-Flow Security Stage Monitor',
+                    subtext: isRelayMode ? `Secure Path: ${selectedNames[0]} → A100 Gateway → ${selectedNames[1]}` : (selectedNames.length ? `Tracking: ${selectedNames.join(', ')}` : 'Global Network Tracking'),
                     left: 'center',
                     top: 10,
                     textStyle: { color: theme.textMuted, fontSize: 16 }
@@ -506,13 +592,13 @@ onMounted(() => {
                         children: [
                             {
                                 type: 'rect',
-                                shape: { width: 220, height: 50, r: 4 },
+                                shape: { width: 220, height: 60, r: 4 },
                                 style: { fill: 'rgba(31, 41, 55, 0.9)', stroke: currentCtx.color, lineWidth: 1 }
                             },
                             {
                                 type: 'text',
                                 style: {
-                                    text: `ACTIVE DEVICE: ${selectedName || 'Global Monitor'}\nCURRENT PHASE: ${props.stage.name}\nFLOW LOGIC: ${props.stage.flow.label}`,
+                                    text: `TRACKING: ${selectedNames.length ? selectedNames.join(' & ') : 'Global'}\nPHASE: ${props.stage.name}\nMODE: ${isRelayMode ? 'Relay Protection' : 'Standard Monitoring'}`,
                                     fill: '#f3f4f6',
                                     font: 'bold 10px sans-serif'
                                 },
@@ -527,7 +613,7 @@ onMounted(() => {
                     formatter: (params: any) => {
                         if (params.seriesName === 'InteractionLayer') {
                             const node = nodes.value.find(n => n.name === params.name);
-                            const sid = params.name === selectedName ? props.stage.id : node?.stageId;
+                            const sid = selectedNames.includes(params.name) ? props.stage.id : node?.stageId;
                             const ctx = getStageContext(sid || 'AUTH');
                             return `<div class="font-bold">${params.name}</div><div>IP: ${params.value}</div><div class="text-[${ctx.color}] mt-1">Stage: ${ctx.text}</div>`;
                         }
@@ -546,7 +632,7 @@ onMounted(() => {
         };
 
         optionBuilder = getOption;
-        applySelection(selectedNodeName.value);
+        applySelection(selectedNodeNames.value);
 
         // Robust Click Handler on the transparent Interaction Layer
         chartInstance.on('click', (params: any) => {
@@ -600,8 +686,11 @@ watch(
 watch(
     () => props.modelValue,
     (next) => {
-        if (!next || next === selectedNodeName.value) return;
-        applySelection(next);
+        if (!next) return;
+        const nextArr = Array.isArray(next) ? next : [next];
+        // Check if content is different
+        if (JSON.stringify(nextArr) === JSON.stringify(selectedNodeNames.value)) return;
+        applySelection(nextArr);
     }
 );
 
@@ -609,12 +698,12 @@ watch(
     () => props.devices,
     (next) => {
         buildNodesFromDevices(next);
-        const hasSelected = nodes.value.some((node) => node.name === selectedNodeName.value);
-        if (!hasSelected) {
+        // Ensure at least one fallback if nothing selected and in device mode
+        if (selectedNodeNames.value.length === 0) {
             const fallback = nodes.value.find((node) => node.category === 'device');
             if (fallback) {
-                selectedNodeName.value = fallback.name;
-                emit('update:modelValue', fallback.name);
+                applySelection([fallback.name]);
+                emit('update:modelValue', [fallback.name]);
                 emit('node-select', fallback);
             }
         }
@@ -640,7 +729,8 @@ watch(
                         :class="viewMode === 'all' ? 'bg-teal-500 text-white' : 'text-gray-400 hover:text-gray-200'"
                         class="px-3 py-1 rounded-md text-[10px] font-bold transition-all">Full Cycle</button>
                 </div>
-                <div class="meta-pill">Selected: <span class="meta-strong">{{ selectedNodeName || 'Global' }}</span>
+                <div class="meta-pill">Selected: <span class="meta-strong">{{ selectedNodeNames.length ?
+                    selectedNodeNames.join(' & ') : 'Global' }}</span>
                 </div>
                 <div class="meta-pill">Devices: <span class="meta-strong">{{ deviceNodes.length }}</span></div>
             </div>
@@ -662,7 +752,7 @@ watch(
                     </div>
                     <div class="side-list overflow-y-auto pr-1 custom-scrollbar flex-1">
                         <button v-for="node in deviceNodes" :key="node.name" @click="selectNode(node.name)"
-                            class="side-item mb-1.5" :class="selectedNodeName === node.name ? 'is-active' : ''">
+                            class="side-item mb-1.5" :class="selectedNodeNames.includes(node.name) ? 'is-active' : ''">
                             <div class="item-header">
                                 <span class="item-name">{{ node.name }}</span>
                                 <span class="status-badge" :style="{
@@ -675,8 +765,10 @@ watch(
                             </div>
                             <div class="flex items-center justify-between pointer-events-none">
                                 <span class="side-ip">{{ node.value }}</span>
-                                <span class="text-[9px] text-gray-500 font-mono">LAT:
-                                    {{ (Math.random() * 4 + 1).toFixed(1) }}ms</span>
+                                <span class="text-[9px] text-sky-400 font-bold" v-if="node.throughput > 100">
+                                    {{ Math.round(node.throughput) }} Mbps
+                                </span>
+                                <span class="text-[9px] text-gray-500 font-mono" v-else>STABLE</span>
                             </div>
                         </button>
                     </div>

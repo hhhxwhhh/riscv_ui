@@ -41,41 +41,71 @@ const wss = new WebSocketServer({ server });
 
 console.log(`Mock Suite started on http/ws://localhost:${HTTP_PORT}`);
 
+const STAGE_IDS = ["AUTH", "ENCRYPT", "DECRYPT", "HASH"];
+
+// Track active transaction state for devices
+const activeTransactions = new Map();
+
 wss.on("connection", function connection(ws) {
   console.log("Client connected via WebSocket");
-
-  // Pick all IPs for telemetry simulation
-  const deviceIps = devices.map((d) => d.ip);
 
   // Send a welcome message
   ws.send(
     JSON.stringify({
       type: "info",
-      message: "Connected to Mock Telemetry Server",
+      message: "Connected to Mock Lifecycle Server",
     }),
   );
 
-  // Simulate device traffic
+  // Simulate device traffic with lifecycle logic
   const interval = setInterval(() => {
-    if (ws.readyState === ws.OPEN) {
-      // Pick a random device
-      const deviceIp = deviceIps[Math.floor(Math.random() * deviceIps.length)];
+    if (ws.readyState !== ws.OPEN) return;
 
-      // Create a packet
-      const packet = {
-        source: deviceIp,
-        timestamp: Date.now(),
-        status: "active",
-        metrics: {
-          throughput: 800 + Math.random() * 200,
-          latency: 0.5 + Math.random() * 2,
-          securityScore: 90 + Math.random() * 10,
-        },
+    // Pick a device that doesn't have an active transaction, or progress an existing one
+    const randomDevice = devices[Math.floor(Math.random() * devices.length)];
+    const deviceIp = randomDevice.ip;
+
+    let transaction = activeTransactions.get(deviceIp);
+
+    if (!transaction) {
+      // Start a new transaction for this device
+      transaction = {
+        deviceId: randomDevice.id,
+        deviceName: randomDevice.name,
+        deviceIp: deviceIp,
+        stageIndex: 0,
+        lastUpdate: Date.now(),
       };
-
-      ws.send(JSON.stringify(packet));
+      activeTransactions.set(deviceIp, transaction);
+    } else {
+      // Progress existing transaction
+      transaction.stageIndex++;
+      transaction.lastUpdate = Date.now();
     }
-  }, 1500); // Slightly faster
+
+    const currentStageId = STAGE_IDS[transaction.stageIndex];
+
+    // Create a packet
+    const packet = {
+      source: deviceIp,
+      timestamp: Date.now(),
+      status: "active",
+      stageId: currentStageId,
+      isLastStage: transaction.stageIndex === STAGE_IDS.length - 1,
+      metrics: {
+        throughput: 400 + Math.random() * 800,
+        latency: 0.1 + Math.random() * 2,
+        securityScore: 90 + Math.random() * 10,
+      },
+    };
+
+    ws.send(JSON.stringify(packet));
+
+    // If it was the last stage, remove it after a short delay so the UI can show completion
+    if (transaction.stageIndex >= STAGE_IDS.length - 1) {
+      activeTransactions.delete(deviceIp);
+    }
+  }, 1200);
 
   ws.on("close", () => {
     console.log("Client disconnected");
