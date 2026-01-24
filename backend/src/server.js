@@ -62,8 +62,10 @@ setInterval(() => {
     };
     devices.push(newDev);
     console.log(`[Dynamic] Device joined: ${newDev.name} (${newDev.ip})`);
-    // 补全：即时通知前端
-    broadcast({ type: "device_join", device: newDev });
+    // 修复：确保 broadcast 函数已定义再调用
+    if (typeof broadcast === "function") {
+      broadcast({ type: "device_join", device: newDev });
+    }
   } else if (action === "remove" && devices.length > 45) {
     // 随机移除一个，但不移除前10个核心节点
     const index = 10 + Math.floor(Math.random() * (devices.length - 10));
@@ -71,8 +73,10 @@ setInterval(() => {
     // 清理该设备的活跃交易（如果正在进行）
     activeTransactions.delete(removed.ip);
     console.log(`[Dynamic] Device exited: ${removed.name} (${removed.ip})`);
-    // 补全：即时通知前端
-    broadcast({ type: "device_exit", ip: removed.ip, name: removed.name });
+    // 修复：确保 broadcast 函数已定义再调用
+    if (typeof broadcast === "function") {
+      broadcast({ type: "device_exit", ip: removed.ip, name: removed.name });
+    }
   }
 }, 8000);
 

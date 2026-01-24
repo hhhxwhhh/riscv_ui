@@ -166,7 +166,8 @@ const handleIncomingPacket = (packet: TelemetryPacket) => {
     emit('ws-last-message', Date.now());
     emit('telemetry', packet);
 
-    if (!packet?.source) return;
+    // 修复：如果不是普通的遥测数据（例如设备加入/退出消息），则跳过后续的节点更新逻辑
+    if (!packet?.source || packet.type === 'device_join' || packet.type === 'device_exit') return;
     const targetNode = nodes.value.find(n => n.value.includes(packet.source));
 
     if (targetNode) {
@@ -709,15 +710,7 @@ watch(
     () => props.devices,
     (next) => {
         buildNodesFromDevices(next);
-        // Ensure at least one fallback if nothing selected and in device mode
-        if (selectedNodeNames.value.length === 0) {
-            const fallback = nodes.value.find((node) => node.category === 'device');
-            if (fallback) {
-                applySelection([fallback.name]);
-                emit('update:modelValue', [fallback.name]);
-                emit('node-select', fallback);
-            }
-        }
+        // 修复：移除自动选中首个节点的逻辑，允许初始状态保持为空（即展示 All Devices / 全局模式）
         scheduleRender();
     },
     { deep: true }

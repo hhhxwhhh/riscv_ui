@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { fetchJson } from './api/client';
 import { STAGES } from './api/stages';
 import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
 
-const selectedDevices = ref<string[]>([]);
+// 持久化选择状态
+const savedSelection = localStorage.getItem('selected_devices');
+const selectedDevices = ref<string[]>(savedSelection ? JSON.parse(savedSelection) : []);
+
+// 监听选择变化并保存
+watch(selectedDevices, (newVal) => {
+  localStorage.setItem('selected_devices', JSON.stringify(newVal));
+}, { deep: true });
+
 const selectedDeviceIPs = computed(() => {
   return selectedDevices.value.map(name =>
     devices.value.find(d => d.name === name)?.ip || ''
@@ -47,10 +55,10 @@ const toggleSimulation = () => {
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
+// 执行节点选择回调
 const handleNodeSelect = (node: any) => {
-  // Metadata update only - selection is managed by DeviceTopology v-model
   if (!node || !node.name) return;
-  console.log('Selected Node Metadata:', node);
+  console.log('Selected Node:', node.name);
 };
 
 const handleWsStatus = (status: 'connecting' | 'connected' | 'disconnected') => {
@@ -97,11 +105,17 @@ const loadDevices = async (isBackground = false) => {
   try {
     if (!isBackground) apiStatus.value = 'loading';
     const data = await fetchJson<Array<{ id?: string; name: string; ip: string }>>(`${apiBase}/api/devices`);
-    devices.value = (data || []).map((item) => ({
+
+    // 修复：确保 API 返回的数据能够被正确合并
+    const newDevices = (data || []).map((item) => ({
       id: item.id,
       name: item.name,
       ip: item.ip
     }));
+
+    if (newDevices.length > 0) {
+      devices.value = newDevices;
+    }
 
     // 同步选择状态：移除已不在列表中的设备
     const validNames = new Set(devices.value.map(d => d.name));
@@ -135,10 +149,11 @@ onMounted(() => {
   loadDevices();
   loadMetrics();
 
-  // 仅刷新指标，设备增减通过 WebSocket 实时推送（不再轮询整个列表）
+  // 修复：除了 WS 实时更新，每 10 秒强制全量同步一次，防止 WS 丢包导致的状态不一致
   setInterval(() => {
+    loadDevices(true);
     loadMetrics();
-  }, 5000);
+  }, 10000);
 });
 </script>
 
@@ -252,13 +267,13 @@ onMounted(() => {
       <section class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4" v-if="currentStage">
         <!-- Left: Code Execution (2/3 width) -->
         <div class="lg:col-span-2 min-h-[420px] panel panel-glow p-3">
-          <CodeExecutionViewer :deviceName="selectedDevices[0] || ''" :deviceIP="selectedDeviceIPs[0] || ''"
+          <CodeExecutionViewer :deviceName="selectedDevices[0]" :deviceIP="selectedDeviceIPs[0]"
             :stage="currentStage" />
         </div>
 
         <!-- Right: Analysis (1/3 width) -->
         <div class="lg:col-span-1 min-h-[420px] panel panel-glow p-3">
-          <DataAnalysis :deviceName="selectedDevices[0] || ''" :metrics="latestMetrics" :stage="currentStage" />
+          <DataAnalysis :deviceName="selectedDevices[0]" :metrics="latestMetrics" :stage="currentStage" />
         </div>
       </section>
     </div>

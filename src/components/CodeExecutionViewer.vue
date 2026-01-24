@@ -4,8 +4,8 @@ import { Play, Pause, RotateCcw, Cpu, FileCode } from 'lucide-vue-next';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
-    deviceName: { type: String, default: 'IoT Sensor A' },
-    deviceIP: { type: String, default: '192.168.1.100' },
+    deviceName: { type: String, default: 'All Devices' },
+    deviceIP: { type: String, default: 'Global Broadcast' },
     stage: { type: Object as () => StageInfo, required: true }
 });
 

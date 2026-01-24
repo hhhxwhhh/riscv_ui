@@ -4,7 +4,7 @@ import * as echarts from 'echarts';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
-    deviceName: { type: String, default: 'IoT Sensor A' },
+    deviceName: { type: String, default: 'All Devices' },
     metrics: { type: Object as () => { throughput: number; latency: number; securityScore: number } | null, default: null },
     stage: { type: Object as () => StageInfo, required: true }
 });
