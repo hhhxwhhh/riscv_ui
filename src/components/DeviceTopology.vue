@@ -49,27 +49,34 @@ const nodes = ref<NodeData[]>([]);
 const calculatePositions = (count: number) => {
     const centerX = 400;
     const centerY = 200; // Shifted slightly for better fit
-    const radiusX = 320;
-    const radiusY = 160;
+    const radiusX = 350;
+    const radiusY = 175;
 
     // Generate dozens of points in a responsive arc or circle
     return Array.from({ length: count }, (_, i) => {
-        // Adjust angle to create a semi-circle or full circle
-        // We use a semi-circle on top for a "fan out" look
-        const angle = (i / (count - 1 || 1)) * Math.PI - Math.PI;
+        // Use full circle if count is high, otherwise arc
+        const isHighCount = count > 30;
+        const angle = isHighCount
+            ? (i / count) * 2 * Math.PI
+            : (i / (count - 1 || 1)) * Math.PI - Math.PI;
+
         return {
-            x: centerX + Math.cos(angle) * radiusX,
-            y: centerY + Math.sin(angle) * radiusY
+            x: centerX + Math.cos(angle) * (isHighCount ? radiusX * 0.9 : radiusX),
+            y: centerY + Math.sin(angle) * (isHighCount ? radiusY * 0.9 : radiusY)
         };
     });
 };
 
 const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
-    const previousBlink = new Map(nodes.value.map((node) => [node.name, node.isBlinking]));
+    const previousState = new Map(nodes.value.map((node) => [node.name, {
+        isBlinking: node.isBlinking,
+        throughput: node.throughput,
+        stageId: node.stageId
+    }]));
     const stageIds = ['AUTH', 'ENCRYPT', 'DECRYPT', 'HASH'];
 
-    // If no devices provided, generate 20 demo devices with varied names
-    const defaultDevices = Array.from({ length: 20 }, (_, i) => {
+    // If no devices provided, generate 60 demo devices with varied names
+    const defaultDevices = Array.from({ length: 60 }, (_, i) => {
         const types = ['Sensor', 'Camera', 'Node', 'Relay', 'Terminal'];
         const type = types[i % types.length];
         return {
@@ -82,29 +89,33 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
     const deviceList = (devices && devices.length) ? devices : defaultDevices;
     const positions = calculatePositions(deviceList.length);
 
+    const gatewayName = 'A100 Gateway';
+    const prevGateway = previousState.get(gatewayName);
+
     const gateway = {
-        name: 'A100 Gateway',
+        name: gatewayName,
         x: 400,
         y: 200,
         value: '192.168.1.1',
         category: 'gateway',
-        isBlinking: false,
+        isBlinking: prevGateway?.isBlinking || false,
         stageId: props.stage.id || 'AUTH',
-        throughput: 100,
+        throughput: prevGateway?.throughput || 100,
         description: 'Secure RISC-V Cryptoverse Hub'
     };
 
     const deviceNodes = deviceList.map((device, index) => {
         const pos = positions[index] || { x: 0, y: 0 };
+        const prevState = previousState.get(device.name);
         return {
             name: device.name,
             x: pos.x,
             y: pos.y,
             value: device.ip,
             category: 'device',
-            isBlinking: previousBlink.get(device.name) || false,
-            stageId: stageIds[index % stageIds.length] || 'AUTH',
-            throughput: 100 // Default initial throughput
+            isBlinking: prevState?.isBlinking || false,
+            stageId: prevState?.stageId || stageIds[index % stageIds.length] || 'AUTH',
+            throughput: prevState?.throughput || 0 // Default to 0 for devices
         };
     });
 
@@ -533,7 +544,7 @@ onMounted(() => {
                         ...node,
                         symbol: toSvgDataUrl(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
                         symbolKeepAspect: true,
-                        symbolSize: isGateway ? 55 : (isSelected ? 50 : 35),
+                        symbolSize: isGateway ? 55 : (isSelected ? 50 : (nodes.value.length > 40 ? 22 : 35)),
                         itemStyle: {
                             opacity: opacity,
                             color: color,

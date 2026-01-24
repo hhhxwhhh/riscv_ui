@@ -2,7 +2,7 @@ import { WebSocketServer } from "ws";
 import http from "http";
 
 const HTTP_PORT = 8080;
-const devices = Array.from({ length: 20 }, (_, i) => {
+const devices = Array.from({ length: 60 }, (_, i) => {
   const types = ["Sensor", "Camera", "Node", "Relay", "Terminal"];
   return {
     id: `dev-${i}`,
@@ -105,7 +105,7 @@ wss.on("connection", function connection(ws) {
     if (transaction.stageIndex >= STAGE_IDS.length - 1) {
       activeTransactions.delete(deviceIp);
     }
-  }, 1200);
+  }, 400);
 
   ws.on("close", () => {
     console.log("Client disconnected");

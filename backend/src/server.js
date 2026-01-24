@@ -37,13 +37,44 @@ const PORT = process.env.PORT || 8080;
 
 // In-memory data (replace with DB later)
 const DEVICE_OFFLINE_TIMEOUT = 10000; // 10秒未上报视为离线
-const devices = Array.from({ length: 20 }, (_, i) => ({
+const devices = Array.from({ length: 60 }, (_, i) => ({
   id: `dev-${String.fromCharCode(97 + (i % 26))}${i > 25 ? i : ""}`,
   name: `IoT Node ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ""}`,
   ip: `192.168.1.${100 + i}`,
   status: "online",
   lastSeen: Date.now(),
 }));
+
+// 动态加入和退出设备模拟 (模拟真实环境活跃度)
+setInterval(() => {
+  if (Math.random() > 0.5) return; // 50% 概率动作降低抖动
+
+  const action = Math.random() > 0.4 ? "add" : "remove"; // 略微倾向于增加，直到达到上限
+
+  if (action === "add" && devices.length < 80) {
+    const nextSuffix = devices.length + 100;
+    const newDev = {
+      id: `dev-dyn-${nextSuffix}`,
+      name: `IoT Node D-${nextSuffix}`,
+      ip: `192.168.2.${nextSuffix % 254}`,
+      status: "online",
+      lastSeen: Date.now(),
+    };
+    devices.push(newDev);
+    console.log(`[Dynamic] Device joined: ${newDev.name} (${newDev.ip})`);
+    // 补全：即时通知前端
+    broadcast({ type: "device_join", device: newDev });
+  } else if (action === "remove" && devices.length > 45) {
+    // 随机移除一个，但不移除前10个核心节点
+    const index = 10 + Math.floor(Math.random() * (devices.length - 10));
+    const removed = devices.splice(index, 1)[0];
+    // 清理该设备的活跃交易（如果正在进行）
+    activeTransactions.delete(removed.ip);
+    console.log(`[Dynamic] Device exited: ${removed.name} (${removed.ip})`);
+    // 补全：即时通知前端
+    broadcast({ type: "device_exit", ip: removed.ip, name: removed.name });
+  }
+}, 8000);
 
 // 定时检测设备是否离线
 setInterval(() => {
@@ -171,18 +202,56 @@ wss.on("connection", (ws) => {
   });
 });
 
-// Demo stream: emit telemetry every 2s for testing
+// Demo stream: emit telemetry more frequently for testing with 60 devices
+const STAGE_IDS = ["AUTH", "ENCRYPT", "DECRYPT", "HASH"];
+const activeTransactions = new Map();
+
 setInterval(() => {
-  const dev = devices[Math.floor(Math.random() * devices.length)];
-  const payload = {
-    deviceId: dev.id,
-    source: dev.ip,
-    status: "active",
-    metrics: {
-      throughput: Math.floor(600 + Math.random() * 300),
-      latency: Number((0.8 + Math.random() * 1.6).toFixed(2)),
-      securityScore: Math.floor(85 + Math.random() * 10),
-    },
-  };
-  broadcast({ type: "telemetry", ts: Date.now(), ...payload });
-}, 2000);
+  // Progress existing transactions or start new ones
+  const activeIps = Array.from(activeTransactions.keys());
+
+  // Decide whether to start a new transaction or progress one
+  // Roughly 30% chance to start new if not too many active
+  if (Math.random() < 0.3 && activeIps.length < 15) {
+    const availableLinks = devices.filter((d) => !activeTransactions.has(d.ip));
+    if (availableLinks.length > 0) {
+      const randomDevice =
+        availableLinks[Math.floor(Math.random() * availableLinks.length)];
+      activeTransactions.set(randomDevice.ip, {
+        deviceId: randomDevice.id,
+        deviceName: randomDevice.name,
+        deviceIp: randomDevice.ip,
+        stageIndex: 0,
+      });
+    }
+  }
+
+  // Progress all active transactions
+  activeTransactions.forEach((transaction, ip) => {
+    const currentStageId = STAGE_IDS[transaction.stageIndex];
+    const isLast = transaction.stageIndex === STAGE_IDS.length - 1;
+
+    const payload = {
+      type: "telemetry",
+      deviceId: transaction.deviceId,
+      source: transaction.deviceIp,
+      status: "active",
+      stageId: currentStageId,
+      isLastStage: isLast,
+      metrics: {
+        throughput: Math.floor(600 + Math.random() * 300),
+        latency: Number((0.8 + Math.random() * 1.6).toFixed(2)),
+        securityScore: Math.floor(85 + Math.random() * 10),
+      },
+      ts: Date.now(),
+    };
+
+    broadcast(payload);
+
+    if (isLast) {
+      activeTransactions.delete(ip);
+    } else {
+      transaction.stageIndex++;
+    }
+  });
+}, 500);

@@ -6,7 +6,7 @@ import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
 
-const selectedDevices = ref<string[]>(['IoT Sensor A']);
+const selectedDevices = ref<string[]>([]);
 const selectedDeviceIPs = computed(() => {
   return selectedDevices.value.map(name =>
     devices.value.find(d => d.name === name)?.ip || ''
@@ -17,18 +17,8 @@ const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
 
-// Generate 20 devices as initial state with varied names to show scale
-const devices = ref<{ id?: string; name: string; ip: string }[]>(
-  Array.from({ length: 20 }, (_, i) => {
-    const types = ['Sensor', 'Camera', 'Node', 'Relay', 'Terminal'];
-    const type = types[i % types.length];
-    return {
-      id: `dev-${i}`,
-      name: `IoT ${type} ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ''}`,
-      ip: `192.168.1.${100 + i}`
-    };
-  })
-);
+// 去掉固定部分：初始化为空列表，由 API 和 WebSocket 填充
+const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
 const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 
 const currentStageIndex = ref(0); // Default to Authentication
@@ -72,6 +62,22 @@ const handleWsLastMessage = (timestamp: number) => {
 };
 
 const handleTelemetry = (packet: any) => {
+  // 补全：处理设备动态加入/退出消息
+  if (packet.type === 'device_join') {
+    if (!devices.value.find(d => d.ip === packet.device.ip)) {
+      devices.value.push(packet.device);
+    }
+    return;
+  }
+  if (packet.type === 'device_exit') {
+    devices.value = devices.value.filter(d => d.ip !== packet.ip);
+    // 同步更新选中状态
+    if (selectedDevices.value.includes(packet.name)) {
+      selectedDevices.value = selectedDevices.value.filter(n => n !== packet.name);
+    }
+    return;
+  }
+
   // Update global metrics or selected device metrics
   if (packet?.metrics) {
     // Filter metrics by any of the selected IPs
@@ -87,25 +93,28 @@ const handleTelemetry = (packet: any) => {
   }
 };
 
-const loadDevices = async () => {
+const loadDevices = async (isBackground = false) => {
   try {
-    apiStatus.value = 'loading';
+    if (!isBackground) apiStatus.value = 'loading';
     const data = await fetchJson<Array<{ id?: string; name: string; ip: string }>>(`${apiBase}/api/devices`);
     devices.value = (data || []).map((item) => ({
       id: item.id,
       name: item.name,
       ip: item.ip
     }));
-    if (devices.value.length && !selectedDevices.value.length) {
-      const firstDevice = devices.value[0];
-      if (firstDevice) {
-        selectedDevices.value = [firstDevice.name];
-        // selectedDeviceIPs is a computed property; it derives from selectedDevices
-      }
+
+    // 同步选择状态：移除已不在列表中的设备
+    const validNames = new Set(devices.value.map(d => d.name));
+    const nextSelected = selectedDevices.value.filter(name => validNames.has(name));
+
+    // 移除自动选择逻辑，仅在有选中的设备离开时更新状态
+    if (nextSelected.length !== selectedDevices.value.length) {
+      selectedDevices.value = nextSelected;
     }
+
     apiStatus.value = 'ready';
   } catch {
-    apiStatus.value = 'error';
+    if (!isBackground) apiStatus.value = 'error';
   }
 };
 
@@ -114,17 +123,22 @@ const loadMetrics = async () => {
     const data = await fetchJson<{ throughput?: number; latency?: number; securityScore?: number }>(`${apiBase}/api/metrics`);
     latestMetrics.value = {
       throughput: Number(data.throughput ?? 0),
-      latency: Number(data.latency ?? 0),
-      securityScore: Number(data.securityScore ?? 0)
+      latency: Number(data.latency ?? 1.2),
+      securityScore: Number(data.securityScore ?? 95)
     };
   } catch {
-    // ignore
+    // skip
   }
 };
 
 onMounted(() => {
   loadDevices();
   loadMetrics();
+
+  // 仅刷新指标，设备增减通过 WebSocket 实时推送（不再轮询整个列表）
+  setInterval(() => {
+    loadMetrics();
+  }, 5000);
 });
 </script>
 
