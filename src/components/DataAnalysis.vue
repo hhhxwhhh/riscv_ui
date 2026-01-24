@@ -4,7 +4,7 @@ import * as echarts from 'echarts';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
-    deviceName: { type: String, default: 'IoT Dev-A' },
+    deviceName: { type: String, default: 'IoT Sensor A' },
     metrics: { type: Object as () => { throughput: number; latency: number; securityScore: number } | null, default: null },
     stage: { type: Object as () => StageInfo, required: true }
 });
@@ -23,15 +23,15 @@ const theme = {
 // Simulate different performance profiles for devices
 const getDeviceData = (name: string, stage: StageInfo) => {
     let multiplier = 1.0;
-    // "Secure" - Highest Performance
-    if (name.includes('Dev-C') || name.includes('Secure')) {
-        multiplier = 1.1;
+    // "Secure" or A / C nodes - Better Performance
+    if (name.includes('Secure') || name.includes(' A') || name.includes(' C')) {
+        multiplier = 1.15;
     }
-    // "Low Power" / Dev-B - Lowest Performance
-    if (name.includes('Dev-B')) {
-        multiplier = 0.8;
+    // "Node" or B / D - Standard/Lower Performance
+    if (name.includes('Node') || name.includes(' B') || name.includes(' D')) {
+        multiplier = 0.85;
     }
-    
+
     return {
         standard: [stage.metrics.stdThroughput * multiplier, 0.5, stage.metrics.stdSecurityScore],
         custom: [stage.metrics.throughput * multiplier, 3.5, stage.metrics.securityScore],

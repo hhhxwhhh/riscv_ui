@@ -4,8 +4,8 @@ import { Play, Pause, RotateCcw, Cpu, FileCode } from 'lucide-vue-next';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
-    deviceName: { type: String, default: 'IoT Dev-A' },
-    deviceIP: { type: String, default: '192.168.1.101' },
+    deviceName: { type: String, default: 'IoT Sensor A' },
+    deviceIP: { type: String, default: '192.168.1.100' },
     stage: { type: Object as () => StageInfo, required: true }
 });
 
@@ -97,7 +97,7 @@ onUnmounted(() => {
                 </div>
             </div>
             <div class="flex items-center gap-2">
-                <button @click="showFullCode = true" 
+                <button @click="showFullCode = true"
                     class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
                     <FileCode class="w-4 h-4" />
                     查看完整代码
@@ -118,21 +118,26 @@ onUnmounted(() => {
         <div class="grid grid-cols-2 gap-4 flex-1 overflow-hidden relative">
             <!-- Full Code Overlay -->
             <transition name="fade">
-                <div v-if="showFullCode" class="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-sm p-6 flex flex-col border border-sky-500/30 rounded-lg">
+                <div v-if="showFullCode"
+                    class="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-sm p-6 flex flex-col border border-sky-500/30 rounded-lg">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-bold text-sky-400 flex items-center gap-2">
                             <FileCode class="w-6 h-6" />
                             Security Logic - Full Implementation
                         </h3>
-                        <button @click="showFullCode = false" class="text-gray-400 hover:text-white px-3 py-1 bg-gray-800 rounded">Close</button>
+                        <button @click="showFullCode = false"
+                            class="text-gray-400 hover:text-white px-3 py-1 bg-gray-800 rounded">Close</button>
                     </div>
-                    <div class="flex-1 overflow-y-auto font-mono text-sm grid grid-cols-2 gap-6 p-4 bg-black/40 rounded border border-gray-800">
+                    <div
+                        class="flex-1 overflow-y-auto font-mono text-sm grid grid-cols-2 gap-6 p-4 bg-black/40 rounded border border-gray-800">
                         <div>
-                            <div class="text-rose-400 font-bold mb-2 border-b border-rose-400/20 pb-1">Legacy C Implementation</div>
+                            <div class="text-rose-400 font-bold mb-2 border-b border-rose-400/20 pb-1">Legacy C
+                                Implementation</div>
                             <pre class="text-slate-300 whitespace-pre-wrap">{{ props.stage.fullCode.c }}</pre>
                         </div>
                         <div>
-                            <div class="text-teal-400 font-bold mb-2 border-b border-teal-400/20 pb-1">RISC-V Crypto Extension (ASM)</div>
+                            <div class="text-teal-400 font-bold mb-2 border-b border-teal-400/20 pb-1">RISC-V Crypto
+                                Extension (ASM)</div>
                             <pre class="text-slate-300 whitespace-pre-wrap">{{ props.stage.fullCode.asm }}</pre>
                         </div>
                     </div>

@@ -37,36 +37,13 @@ const PORT = process.env.PORT || 8080;
 
 // In-memory data (replace with DB later)
 const DEVICE_OFFLINE_TIMEOUT = 10000; // 10秒未上报视为离线
-const devices = [
-  {
-    id: "dev-a",
-    name: "IoT Dev-A",
-    ip: "192.168.1.101",
-    status: "online",
-    lastSeen: Date.now(),
-  },
-  {
-    id: "dev-b",
-    name: "IoT Dev-B",
-    ip: "192.168.1.102",
-    status: "online",
-    lastSeen: Date.now(),
-  },
-  {
-    id: "dev-c",
-    name: "IoT Dev-C",
-    ip: "192.168.1.103",
-    status: "online",
-    lastSeen: Date.now(),
-  },
-  {
-    id: "dev-d",
-    name: "IoT Dev-D",
-    ip: "192.168.1.104",
-    status: "online",
-    lastSeen: Date.now(),
-  },
-];
+const devices = Array.from({ length: 20 }, (_, i) => ({
+  id: `dev-${String.fromCharCode(97 + (i % 26))}${i > 25 ? i : ""}`,
+  name: `IoT Node ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ""}`,
+  ip: `192.168.1.${100 + i}`,
+  status: "online",
+  lastSeen: Date.now(),
+}));
 
 // 定时检测设备是否离线
 setInterval(() => {

@@ -62,12 +62,16 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
     const previousBlink = new Map(nodes.value.map((node) => [node.name, node.isBlinking]));
     const stageIds = ['AUTH', 'ENCRYPT', 'DECRYPT', 'HASH'];
 
-    // If no devices provided, generate 24 demo devices to show scalability
-    const defaultDevices = Array.from({ length: 24 }, (_, i) => ({
-        name: `IoT Node ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ''}`,
-        ip: `192.168.1.${100 + i}`,
-        type: 'device'
-    }));
+    // If no devices provided, generate 20 demo devices with varied names
+    const defaultDevices = Array.from({ length: 20 }, (_, i) => {
+        const types = ['Sensor', 'Camera', 'Node', 'Relay', 'Terminal'];
+        const type = types[i % types.length];
+        return {
+            name: `IoT ${type} ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ''}`,
+            ip: `192.168.1.${100 + i}`,
+            type: 'device'
+        };
+    });
 
     const deviceList = (devices && devices.length) ? devices : defaultDevices;
     const positions = calculatePositions(deviceList.length);
@@ -79,7 +83,7 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
         value: '192.168.1.1',
         category: 'gateway',
         isBlinking: false,
-        stageId: props.stage.id,
+        stageId: props.stage.id || 'AUTH',
         description: 'Secure RISC-V Cryptoverse Hub'
     };
 
@@ -92,7 +96,7 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
             value: device.ip,
             category: 'device',
             isBlinking: previousBlink.get(device.name) || false,
-            stageId: stageIds[index % stageIds.length]
+            stageId: stageIds[index % stageIds.length] || 'AUTH'
         };
     });
 
@@ -100,6 +104,14 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
 };
 
 buildNodesFromDevices(props.devices);
+
+// Watch for device list changes from parent/API
+watch(() => props.devices, (newDevices) => {
+    buildNodesFromDevices(newDevices);
+    if (chartInstance && optionBuilder) {
+        chartInstance.setOption(optionBuilder(selectedNodeName.value));
+    }
+}, { deep: true });
 
 // ----------------------------------------------------------------------
 // Real Data Interface
@@ -321,8 +333,6 @@ onMounted(() => {
                 }
 
                 stagesToShow.forEach((sid) => {
-                    const ctx = getStageContext(sid);
-
                     // Logic mapping for demo flow directions
                     const isReverse = (sid === 'AUTH'); // Device -> Gateway
                     const isInternal = (sid === 'DECRYPT' || sid === 'HASH');
@@ -337,13 +347,14 @@ onMounted(() => {
 
                     const sPos = nodeMap[source];
                     const tPos = nodeMap[target];
-                    const gPos = [gatewayNode.x, gatewayNode.y];
 
-                    if (sPos && tPos) {
+                    if (sPos && tPos && linesByStage[sid]) {
                         if (isInternal && !isGlobal) {
+                            const gx = gatewayNode.x;
+                            const gy = gatewayNode.y;
                             // Loop effect for internal processing at gateway for focused device
                             linesByStage[sid].push({
-                                coords: [gPos, [gPos[0] + 30, gPos[1] - 40], [gPos[0] + 60, gPos[1]], [gPos[0] + 30, gPos[1] + 40], gPos]
+                                coords: [[gx, gy], [gx + 30, gy - 40], [gx + 60, gy], [gx + 30, gy + 40], [gx, gy]]
                             });
                         } else {
                             // Spread concurrent lines out slightly for visible clarity if many stages
@@ -362,9 +373,11 @@ onMounted(() => {
 
             // 1. Multi-stage Traffic Lines
             stageIds.forEach(sid => {
-                if (linesByStage[sid].length === 0) return;
+                const currentLines = linesByStage[sid];
+                if (!currentLines || currentLines.length === 0) return;
+
                 const ctx = getStageContext(sid);
-                const isSelectedFlow = !isGlobal && selectedName && linesByStage[sid].length > 0;
+                const isSelectedFlow = !isGlobal && selectedName && currentLines.length > 0;
 
                 series.push({
                     type: 'lines',
@@ -384,7 +397,7 @@ onMounted(() => {
                         curveness: 0.2, // Default, items might override
                         opacity: isGlobal ? 0.3 : 0.7
                     },
-                    data: linesByStage[sid],
+                    data: currentLines,
                     z: 1
                 });
             });
@@ -403,7 +416,6 @@ onMounted(() => {
                     color: '#d1d5db',
                     formatter: (p: any) => {
                         const isGateway = p.name.includes('Gateway');
-                        const isFocused = p.name === selectedName;
                         const deviceNode = nodes.value.find(n => n.name === p.name);
 
                         // If in Full Cycle mode and no focus, show node's own stage.
@@ -749,13 +761,13 @@ watch(
     gap: 12px;
     flex: 1;
     height: 100%;
-    min-height: 260px;
+    min-height: 400px;
 }
 
 .topology-canvas {
     position: relative;
     height: 100%;
-    min-height: 260px;
+    min-height: 400px;
     border-radius: 12px;
     background: radial-gradient(800px 260px at 50% -40%, rgba(125, 211, 252, 0.12), transparent 60%),
         rgba(15, 23, 42, 0.35);

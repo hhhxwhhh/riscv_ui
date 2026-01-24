@@ -6,12 +6,24 @@ import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
 
-const selectedDevice = ref('IoT Dev-A');
-const selectedDeviceIP = ref('192.168.1.101');
+const selectedDevice = ref('IoT Sensor A');
+const selectedDeviceIP = ref('192.168.1.100');
 const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
-const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
+
+// Generate 20 devices as initial state with varied names to show scale
+const devices = ref<{ id?: string; name: string; ip: string }[]>(
+  Array.from({ length: 20 }, (_, i) => {
+    const types = ['Sensor', 'Camera', 'Node', 'Relay', 'Terminal'];
+    const type = types[i % types.length];
+    return {
+      id: `dev-${i}`,
+      name: `IoT ${type} ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ''}`,
+      ip: `192.168.1.${100 + i}`
+    };
+  })
+);
 const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 
 const currentStageIndex = ref(0); // Default to Authentication
