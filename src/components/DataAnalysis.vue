@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted, watch } from 'vue';
 import * as echarts from 'echarts';
+import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
     deviceName: { type: String, default: 'IoT Dev-A' },
-    metrics: { type: Object as () => { throughput: number; latency: number; securityScore: number } | null, default: null }
+    metrics: { type: Object as () => { throughput: number; latency: number; securityScore: number } | null, default: null },
+    stage: { type: Object as () => StageInfo, required: true }
 });
 
 const chartRef = ref<HTMLElement | null>(null);
@@ -19,29 +21,35 @@ const theme = {
 };
 
 // Simulate different performance profiles for devices
-const getDeviceData = (name: string) => {
+const getDeviceData = (name: string, stage: StageInfo) => {
+    let multiplier = 1.0;
     // "Secure" - Highest Performance
     if (name.includes('Dev-C') || name.includes('Secure')) {
-        return { standard: [135, 0.9, 65], custom: [980, 5.8, 100], latencyStd: '11.2 ms', latencyCust: '0.6 ms' };
+        multiplier = 1.1;
     }
     // "Low Power" / Dev-B - Lowest Performance
     if (name.includes('Dev-B')) {
-        return { standard: [75, 0.5, 40], custom: [750, 3.5, 90], latencyStd: '24.5 ms', latencyCust: '1.8 ms' };
+        multiplier = 0.8;
     }
-    // "Standard" / Dev-A - Mid Performance
-    return { standard: [90, 0.6, 50], custom: [850, 4.2, 95], latencyStd: '18.2 ms', latencyCust: '1.2 ms' };
+    
+    return {
+        standard: [stage.metrics.stdThroughput * multiplier, 0.5, stage.metrics.stdSecurityScore],
+        custom: [stage.metrics.throughput * multiplier, 3.5, stage.metrics.securityScore],
+        latencyStd: `${(stage.metrics.stdLatency / multiplier).toFixed(1)} ms`,
+        latencyCust: `${(stage.metrics.latency / multiplier).toFixed(1)} ms`
+    };
 };
 
 const updateChart = () => {
     if (props.metrics) {
         stats.value = {
-            standard: [120, 0.8, 60],
+            standard: [props.stage.metrics.stdThroughput, 0.8, props.stage.metrics.stdSecurityScore],
             custom: [props.metrics.throughput, 4.2, props.metrics.securityScore],
-            latencyStd: '18.2 ms',
+            latencyStd: `${props.stage.metrics.stdLatency} ms`,
             latencyCust: `${props.metrics.latency} ms`
         };
     } else {
-        stats.value = getDeviceData(props.deviceName);
+        stats.value = getDeviceData(props.deviceName, props.stage);
     }
     if (!chartInstance) return;
 
@@ -57,9 +65,10 @@ const updateChart = () => {
 
 watch(() => props.deviceName, updateChart);
 watch(() => props.metrics, updateChart);
+watch(() => props.stage, updateChart);
 
 onMounted(() => {
-    stats.value = getDeviceData(props.deviceName);
+    stats.value = getDeviceData(props.deviceName, props.stage);
 
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');

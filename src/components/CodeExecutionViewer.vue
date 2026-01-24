@@ -1,53 +1,33 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { Play, Pause, RotateCcw, Cpu } from 'lucide-vue-next';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { Play, Pause, RotateCcw, Cpu, FileCode } from 'lucide-vue-next';
+import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
     deviceName: { type: String, default: 'IoT Dev-A' },
-    deviceIP: { type: String, default: '192.168.1.101' }
+    deviceIP: { type: String, default: '192.168.1.101' },
+    stage: { type: Object as () => StageInfo, required: true }
 });
 
 let switchTimer: number | null = null;
 
-// Watch for device changes to simulate context switching
-watch(() => props.deviceName, () => {
+// Watch for device or stage changes to simulate context switching
+watch([() => props.deviceName, () => props.stage], () => {
     // Reset and restart to give visual feedback of switching context
     resetSimulation();
     if (switchTimer) window.clearTimeout(switchTimer);
     switchTimer = window.setTimeout(() => startSimulation(), 100);
 });
 
-// Mock Data
-const standardInstructions = [
-    'LD      a0, 0(packet_limit) # Load Packet Header',
-    'LI      t1, 0x1234          # Load IV Checksum',
-    'XOR     a0, a0, t1          # Decrypt Header Byte',
-    'SLLI    a1, a0, 4           # Align Offset',
-    'SRLI    a2, a0, 2           # Mask Bits',
-    'OR      a0, a1, a2          # Extract Length',
-    'ADD     t2, t2, 1           # Increment Byte Ptr',
-    'BNE     t2, payload_len, L1 # Loop Payload',
-    'SD      a0, 0(buffer)       # Store Decrypted Data',
-    // Repeat similar pattern to show length
-    'LD      a0, 8(packet_limit) ',
-    'XOR     a0, a0, t1          ',
-    'SD      a0, 8(buffer)       '
-];
-
-const customInstructions = [
-    'LD      a0, 0(packet_base)  # Load 64-bit Packet Chunk',
-    'LKEY    k0, 0(secure_mem)   # Load Hardware Key',
-    'RISCV.ENC a0, a0, k0        # HW Decrypt (Single Cycle)',
-    'SD      a0, 0(dma_buffer)   # Direct Store to DMA',
-    'ADDI    t0, t0, 8           # Next Chunk',
-    'ADDI    t4, t4, 8           # Update Buffer Ptr'
-];
+const standardInstructions = computed(() => props.stage.standardInstructions);
+const customInstructions = computed(() => props.stage.customInstructions);
 
 // State
 const isRunning = ref(false);
 const standardIdx = ref(0);
 const customIdx = ref(0);
 const timer = ref<number | null>(null);
+const showFullCode = ref(false);
 
 // Simulation Speed (ms per instruction)
 const speed = 500;
@@ -57,7 +37,7 @@ const registers = ref({
     pc: '0x80000000',
     a0: '0x00000000',
     t1: '0x12340000',
-    process: 'ENCRYPTION'
+    process: computed(() => props.stage.statusText)
 });
 
 const updateRegisters = () => {
@@ -72,8 +52,8 @@ const startSimulation = () => {
 
     timer.value = setInterval(() => {
         // Advance Standard
-        standardIdx.value = (standardIdx.value + 1) % standardInstructions.length;
-        customIdx.value = (customIdx.value + 1) % customInstructions.length;
+        standardIdx.value = (standardIdx.value + 1) % standardInstructions.value.length;
+        customIdx.value = (customIdx.value + 1) % customInstructions.value.length;
         updateRegisters();
     }, speed);
 };
@@ -117,6 +97,11 @@ onUnmounted(() => {
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <button @click="showFullCode = true" 
+                    class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
+                    <FileCode class="w-4 h-4" />
+                    查看完整代码
+                </button>
                 <div class="px-3 py-1 rounded-full text-xs bg-slate-800/60 border border-slate-700/60 text-slate-300">
                     Speed: {{ speed }}ms
                 </div>
@@ -130,7 +115,30 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
+        <div class="grid grid-cols-2 gap-4 flex-1 overflow-hidden relative">
+            <!-- Full Code Overlay -->
+            <transition name="fade">
+                <div v-if="showFullCode" class="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-sm p-6 flex flex-col border border-sky-500/30 rounded-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-sky-400 flex items-center gap-2">
+                            <FileCode class="w-6 h-6" />
+                            Security Logic - Full Implementation
+                        </h3>
+                        <button @click="showFullCode = false" class="text-gray-400 hover:text-white px-3 py-1 bg-gray-800 rounded">Close</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto font-mono text-sm grid grid-cols-2 gap-6 p-4 bg-black/40 rounded border border-gray-800">
+                        <div>
+                            <div class="text-rose-400 font-bold mb-2 border-b border-rose-400/20 pb-1">Legacy C Implementation</div>
+                            <pre class="text-slate-300 whitespace-pre-wrap">{{ props.stage.fullCode.c }}</pre>
+                        </div>
+                        <div>
+                            <div class="text-teal-400 font-bold mb-2 border-b border-teal-400/20 pb-1">RISC-V Crypto Extension (ASM)</div>
+                            <pre class="text-slate-300 whitespace-pre-wrap">{{ props.stage.fullCode.asm }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
             <!-- Standard Column -->
             <div class="flex flex-col border-r border-gray-700/80 pr-2">
                 <h3 class="text-lg font-semibold text-rose-300 mb-2">Standard Instructions</h3>

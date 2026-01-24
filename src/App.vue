@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { fetchJson } from './api/client';
+import { STAGES } from './api/stages';
 import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
@@ -9,15 +10,45 @@ const selectedDevice = ref('IoT Dev-A');
 const selectedDeviceIP = ref('192.168.1.101');
 const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
-const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number } | null>(null);
+const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
 const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
 const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 
+const currentStageIndex = ref(0); // Default to Authentication
+const currentStage = computed(() => STAGES[currentStageIndex.value] || STAGES[0]);
+
+const isSimulating = ref(false);
+let simTimer: any = null;
+
+const toggleSimulation = () => {
+  if (isSimulating.value) {
+    clearInterval(simTimer);
+    isSimulating.value = false;
+  } else {
+    isSimulating.value = true;
+    currentStageIndex.value = 0;
+    simTimer = setInterval(() => {
+      if (currentStageIndex.value < STAGES.length - 1) {
+        currentStageIndex.value++;
+      } else {
+        clearInterval(simTimer);
+        isSimulating.value = false;
+      }
+    }, 4000);
+  }
+};
+
 const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const handleNodeSelect = (node: any) => {
-  if (node.name !== 'Gateway') {
+  if (!node || !node.name) {
+    selectedDevice.value = '';
+    selectedDeviceIP.value = '';
+    return;
+  }
+
+  if (node.name !== 'Gateway' && node.name !== 'A100 Gateway') {
     selectedDevice.value = node.name;
-    selectedDeviceIP.value = node.value;
+    selectedDeviceIP.value = node.value || '';
   }
 };
 
@@ -91,8 +122,8 @@ onMounted(() => {
               class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-lg">
               R</div>
             <div>
-              <h1 class="text-2xl font-bold tracking-wide">RISC-V Security Instruction Demo</h1>
-              <div class="subtle-text text-sm mt-0.5">实时监控安全指令执行与性能差异</div>
+              <h1 class="text-2xl font-bold tracking-wide">RISC-V 全架构安全网关演示系统</h1>
+              <div class="subtle-text text-sm mt-0.5">面向物联网的全生命周期加解密与身份认证监控</div>
             </div>
           </div>
           <div class="flex items-center gap-3">
@@ -126,43 +157,72 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
           <transition name="fade-slide" mode="out-in">
             <div :key="selectedDevice" class="panel px-4 py-3">
               <div class="text-xs uppercase subtle-text">Active Device</div>
-              <div class="text-lg font-semibold text-sky-200 mt-1">{{ selectedDevice }}</div>
+              <div class="text-lg font-semibold text-sky-200 mt-1">{{ selectedDevice || 'All Devices' }}</div>
             </div>
           </transition>
           <transition name="fade-slide" mode="out-in">
             <div :key="selectedDeviceIP" class="panel px-4 py-3">
               <div class="text-xs uppercase subtle-text">Target IP</div>
-              <div class="text-lg font-mono text-slate-200 mt-1">{{ selectedDeviceIP }}</div>
+              <div class="text-lg font-mono text-slate-200 mt-1">{{ selectedDeviceIP || 'Global Broadcast' }}</div>
             </div>
           </transition>
-          <div class="panel px-4 py-3">
-            <div class="text-xs uppercase subtle-text">Security Mode</div>
-            <div class="text-lg font-semibold text-teal-200 mt-1">Crypto Extension Active</div>
+          <div class="panel px-4 py-3 border-l-4 border-slate-500/30">
+            <div class="text-xs uppercase subtle-text mb-2">Process Progress</div>
+            <div class="flex items-center gap-1.5 h-7">
+              <div v-for="(stage, idx) in STAGES" :key="stage.id"
+                class="flex-1 h-1.5 rounded-full transition-all duration-500"
+                :class="idx <= currentStageIndex ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]' : 'bg-slate-700'">
+              </div>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+              <span>START</span>
+              <span class="text-sky-300 font-bold uppercase">{{ currentStageIndex + 1 }} / {{ STAGES.length }}</span>
+              <span>END</span>
+            </div>
+          </div>
+          <div class="panel px-4 py-3 border-l-4 border-teal-500/50" v-if="currentStage">
+            <div class="flex items-center justify-between">
+              <div class="text-xs uppercase subtle-text">Communication Stage</div>
+              <button @click="toggleSimulation" class="text-[10px] px-2 py-0.5 rounded border transition-colors"
+                :class="isSimulating ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : 'bg-sky-500/20 border-sky-500/50 text-sky-300'">
+                {{ isSimulating ? 'STOP SIM' : 'PLAY PROCESS' }}
+              </button>
+            </div>
+            <select v-model="currentStageIndex"
+              class="bg-transparent text-teal-200 font-semibold text-lg border-none focus:ring-0 w-full cursor-pointer appearance-none">
+              <option v-for="(stage, idx) in STAGES" :key="stage.id" :value="idx" class="bg-slate-800 text-teal-200">
+                {{ stage.name }}
+              </option>
+            </select>
+          </div>
+          <div class="panel px-4 py-3" v-if="currentStage">
+            <div class="text-xs uppercase subtle-text">Current Status</div>
+            <div class="text-lg font-semibold text-amber-200 mt-1 animate-pulse">{{ currentStage.statusText }}</div>
           </div>
         </div>
       </header>
 
       <!-- Top Section: Topology -->
-      <section class="flex-none panel panel-glow p-4">
+      <section class="flex-none panel panel-glow p-4" v-if="currentStage">
         <DeviceTopology @node-select="handleNodeSelect" @ws-status="handleWsStatus"
           @ws-last-message="handleWsLastMessage" @telemetry="handleTelemetry" v-model="selectedDevice"
-          :devices="devices" />
+          :devices="devices" :stage="currentStage" />
       </section>
 
       <!-- Bottom Section: Execution & Analysis -->
-      <section class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <section class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4" v-if="currentStage">
         <!-- Left: Code Execution (2/3 width) -->
         <div class="lg:col-span-2 min-h-[420px] panel panel-glow p-3">
-          <CodeExecutionViewer :deviceName="selectedDevice" :deviceIP="selectedDeviceIP" />
+          <CodeExecutionViewer :deviceName="selectedDevice" :deviceIP="selectedDeviceIP" :stage="currentStage" />
         </div>
 
         <!-- Right: Analysis (1/3 width) -->
         <div class="lg:col-span-1 min-h-[420px] panel panel-glow p-3">
-          <DataAnalysis :deviceName="selectedDevice" :metrics="latestMetrics" />
+          <DataAnalysis :deviceName="selectedDevice" :metrics="latestMetrics" :stage="currentStage" />
         </div>
       </section>
     </div>
