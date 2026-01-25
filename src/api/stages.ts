@@ -29,7 +29,7 @@ export interface StageInfo {
 export const STAGES: StageInfo[] = [
     {
         id: 'AUTH',
-        name: '① 身份认证 (Handshake)',
+        name: 'Authentication',
         description: '基于 SM2 算法的设备身份双向认证过程。确认设备合法性，建立安全信任。',
         statusText: 'AUTHENTICATING...',
         flow: { source: 'device', target: 'gateway', label: 'Auth Challenge/Response', direction: 'reverse' },
@@ -84,7 +84,7 @@ export const STAGES: StageInfo[] = [
     },
     {
         id: 'ENCRYPT',
-        name: '② 加密上传 (Encrypting)',
+        name: 'Encryption',
         description: '使用 SM4 硬件加速对业务数据进行加密。确保传感器数据在网络中不被窃听。',
         statusText: 'ENCRYPTING PAYLOAD',
         flow: { source: 'device', target: 'gateway', label: 'Secure Data Stream', direction: 'forward' },
@@ -135,7 +135,7 @@ export const STAGES: StageInfo[] = [
     },
     {
         id: 'DECRYPT',
-        name: '③ 实时解密 (Decrypting)',
+        name: 'Decryption',
         description: '网关端接收并实时解密。将各物联网终端的机密数据还原为可处理格式。',
         statusText: 'DECRYPTING DATA',
         flow: { source: 'gateway', target: 'gateway', label: 'Gateway Side Processing', direction: 'internal' },
@@ -184,7 +184,7 @@ export const STAGES: StageInfo[] = [
     },
     {
         id: 'HASH',
-        name: '④ 完整性校验 (Integrity)',
+        name: 'Hash',
         description: '计算 SM3 哈希。验证解密后的业务数据在处理过程中未被篡改，保证可靠性。',
         statusText: 'CALCULATING HASH',
         flow: { source: 'gateway', target: 'internal', label: 'Verified Forwarding', direction: 'forward' },

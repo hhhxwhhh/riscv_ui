@@ -467,7 +467,12 @@ onMounted(() => {
                             const gy = gatewayNode.y;
                             linesByStage[sid].push({
                                 coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
-                                lineStyle: { width: 2, opacity: flowOpacity, color: ctx.color }
+                                lineStyle: { width: 2, opacity: flowOpacity, color: ctx.color },
+                                // Added for tooltip
+                                sourceName: 'Gateway Engine',
+                                targetName: 'HW Accelerator',
+                                stageName: ctx.text,
+                                throughput: tput
                             });
                         } else {
                             const curve = isGlobal ? 0.2 : (0.1 + (stageIds.indexOf(sid) * 0.15));
@@ -479,7 +484,12 @@ onMounted(() => {
                                     curveness: isRelayMode ? (node.name === nodeB ? -0.25 : 0.25) : curve,
                                     opacity: flowOpacity,
                                     color: ctx.color
-                                }
+                                },
+                                // Added for tooltip
+                                sourceName: source,
+                                targetName: target,
+                                stageName: ctx.text,
+                                throughput: tput
                             });
                         }
                     }
@@ -487,6 +497,53 @@ onMounted(() => {
             });
 
             const series: any[] = [];
+
+            const coreGateway = nodes.value.find(n => n.category === 'gateway');
+            if (coreGateway) {
+                // Core Pulse Rings
+                series.push({
+                    type: 'effectScatter',
+                    coordinateSystem: 'cartesian2d',
+                    silent: true,
+                    data: [{
+                        name: 'Gateway Pulse',
+                        value: [coreGateway.x, coreGateway.y]
+                    }],
+                    symbolSize: 120,
+                    showEffectOn: 'render',
+                    rippleEffect: {
+                        brushType: 'stroke',
+                        scale: 1.5,
+                        period: 4
+                    },
+                    itemStyle: {
+                        color: 'rgba(251, 113, 133, 0.15)',
+                        shadowBlur: 15,
+                        shadowColor: theme.danger
+                    },
+                    z: 0
+                });
+            }
+
+            // 0. Background Decorative Layer (Space filler)
+            series.push({
+                type: 'graph',
+                coordinateSystem: 'cartesian2d',
+                layout: 'none',
+                silent: true,
+                z: 0,
+                data: Array.from({ length: 25 }, () => ({
+                    x: Math.random() * 800,
+                    y: Math.random() * 400,
+                    symbolSize: Math.random() * 2 + 0.5,
+                    itemStyle: { color: 'rgba(125, 211, 252, 0.1)' }
+                })),
+                links: Array.from({ length: 20 }, () => ({
+                    source: Math.floor(Math.random() * 25),
+                    target: Math.floor(Math.random() * 25),
+                    lineStyle: { color: 'rgba(125, 211, 252, 0.03)', width: 0.5 }
+                }))
+            });
 
             // 1. Multi-stage Traffic Lines
             stageIds.forEach(sid => {
@@ -513,7 +570,8 @@ onMounted(() => {
 
                 series.push({
                     type: 'lines',
-                    silent: true,
+                    name: `Flow-${sid}`,
+                    silent: false,
                     coordinateSystem: 'cartesian2d',
                     effect: {
                         show: true,
@@ -663,22 +721,93 @@ onMounted(() => {
                     {
                         type: 'group',
                         left: 20,
-                        bottom: 80,
+                        top: 20,
                         children: [
                             {
                                 type: 'rect',
-                                shape: { width: 220, height: 60, r: 4 },
-                                style: { fill: 'rgba(31, 41, 55, 0.9)', stroke: currentCtx.color, lineWidth: 1 }
+                                shape: { width: 220, height: 120, r: 4 },
+                                style: { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(125, 211, 252, 0.4)', lineWidth: 2 }
+                            },
+                            {
+                                type: 'circle',
+                                shape: { r: 5 },
+                                style: { fill: theme.success },
+                                left: 195,
+                                top: 16
                             },
                             {
                                 type: 'text',
                                 style: {
-                                    text: `TRACKING: ${selectedNames.length ? selectedNames.join(' & ') : 'Global'}\nPHASE: ${props.stage.name}\nMODE: ${isRelayMode ? 'Relay Protection' : 'Standard Monitoring'}`,
-                                    fill: '#f3f4f6',
-                                    font: 'bold 10px sans-serif'
+                                    text: 'SYSTEM TELEMETRY',
+                                    fill: '#7dd3fc',
+                                    font: 'bold 13px sans-serif'
                                 },
-                                left: 10,
-                                top: 8
+                                left: 15,
+                                top: 15
+                            },
+                            {
+                                type: 'text',
+                                style: {
+                                    text: [
+                                        `PROTO: SM4-CBC/CTR-V2.0`,
+                                        `AUTH: SM2-ID-CERT-V1.28`,
+                                        `IO: ${nodes.value.filter(n => n.isBlinking).length} Act / ${nodes.value.length} Node`,
+                                        `STATUS: LIVE-STREAMING`,
+                                        `RISC-V: HARDWARE-ACCEL`
+                                    ].join('\n'),
+                                    fill: '#94a3b8',
+                                    font: '12px monospace',
+                                    lineHeight: 18
+                                },
+                                left: 15,
+                                top: 35
+                            },
+                            {
+                                type: 'rect',
+                                shape: { width: 190, height: 3 },
+                                style: { fill: 'rgba(52, 211, 153, 0.1)' },
+                                left: 15,
+                                top: 105
+                            },
+                            {
+                                type: 'rect',
+                                shape: { width: 160, height: 3 },
+                                style: { fill: '#34d399' },
+                                left: 15,
+                                top: 105
+                            }
+                        ]
+                    },
+                    {
+                        type: 'text',
+                        right: 20,
+                        top: 20,
+                        style: {
+                            text: 'ZONE-A1 MONITOR // RC-01',
+                            fill: 'rgba(148, 163, 184, 0.5)',
+                            font: '9px monospace'
+                        }
+                    },
+                    {
+                        type: 'group',
+                        left: 20,
+                        bottom: 30,
+                        children: [
+                            {
+                                type: 'rect',
+                                shape: { width: 360, height: 90, r: 6 },
+                                style: { fill: 'rgba(31, 41, 55, 0.95)', stroke: currentCtx.color, lineWidth: 2.5 }
+                            },
+                            {
+                                type: 'text',
+                                style: {
+                                    text: `TARGET: ${selectedNames.length ? (selectedNames.join(' & ').length > 30 ? selectedNames.join(' & ').substring(0, 27) + '...' : selectedNames.join(' & ')) : 'ALL_NODES'}\nPHASE: ${props.stage.name.toUpperCase()}\nSECURITY: ${isRelayMode ? 'RELAY_PROTECTION_ACTIVE' : 'STANDARD_TRAFFIC_MONITOR'}`,
+                                    fill: '#f3f4f6',
+                                    font: 'bold 12px monospace',
+                                    lineHeight: 20
+                                },
+                                left: 18,
+                                top: 18
                             }
                         ]
                     }
@@ -686,6 +815,45 @@ onMounted(() => {
                 tooltip: {
                     trigger: 'item' as const,
                     formatter: (params: any) => {
+                        if (params.seriesType === 'lines') {
+                            const data = params.data;
+                            const ctx = getStageContext(props.stage.id);
+                            const proto = data.stageName.includes('AUTH') ? 'SM2 / TLS' :
+                                (data.stageName.includes('ENCRYPT') ? 'SM4-CBC' :
+                                    (data.stageName.includes('HASH') ? 'SM3-HMAC' : 'RISC-V ISA'));
+
+                            return `
+                                <div class="px-3 py-2 font-mono text-xs">
+                                    <div class="border-b border-gray-600 pb-1 mb-2 flex justify-between items-center">
+                                        <b class="text-sky-400">Secure Channel</b>
+                                        <span class="text-[9px] bg-sky-900/50 text-sky-200 px-1.5 py-0.5 rounded border border-sky-700/50">ACTIVE</span>
+                                    </div>
+                                    <div class="space-y-1.5 min-w-[160px]">
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Source:</span>
+                                            <span class="text-gray-200">${data.sourceName}</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Target:</span>
+                                            <span class="text-gray-200">${data.targetName}</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Protocol:</span>
+                                            <span class="text-sky-300 font-bold">${proto}</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Payload:</span>
+                                            <span class="text-gray-300">${data.throughput ? (data.throughput / 8).toFixed(1) : 0} MB/s</span>
+                                        </div>
+                                        <div class="mt-2 pt-1 border-t border-gray-700/50 flex items-center justify-between">
+                                            <span class="text-[9px] text-gray-500 italic">Current Phase:</span>
+                                            <span style="color: ${ctx.color}" class="text-[10px] font-bold uppercase">${data.stageName}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+
                         if (params.seriesName === 'InteractionLayer') {
                             const node = nodes.value.find(n => n.name === params.name);
                             const sid = (selectedNames.includes(params.name) && viewMode.value !== 'all') ? props.stage.id : (node?.stageId || 'AUTH');
@@ -693,22 +861,45 @@ onMounted(() => {
                             const isGateway = params.name.includes('Gateway');
 
                             return `
-                                <div class="px-2 py-1 font-mono text-xs">
-                                    <div class="border-b border-gray-600 pb-1 mb-1 flex justify-between items-center">
-                                        <b class="${isGateway ? 'text-red-400' : 'text-blue-400'}">${params.name}</b>
-                                        <span class="text-[8px] bg-gray-700 px-1 rounded ml-2">Hardware Unit</span>
+                                <div class="px-3 py-2 font-mono text-xs">
+                                    <div class="border-b border-gray-600 pb-1 mb-2 flex justify-between items-center">
+                                        <b class="${isGateway ? 'text-rose-400' : 'text-blue-400'}">${params.name}</b>
+                                        <span class="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700">${isGateway ? 'Security Hub' : 'IoT Node'}</span>
                                     </div>
-                                    <div class="space-y-0.5">
-                                        <div>Addr: <span class="text-gray-300 font-bold">${params.value}</span></div>
-                                        <div>State: <span style="color: ${ctx.color}">${ctx.text}</span></div>
+                                    <div class="space-y-1.5 min-w-[180px]">
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">IP Addr:</span>
+                                            <span class="text-gray-200 font-bold">${params.value}</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-500">Security:</span>
+                                            <span style="color: ${ctx.color}" class="font-bold">${ctx.text}</span>
+                                        </div>
                                         ${isGateway ? `
-                                            <div class="mt-1 pt-1 border-t border-gray-700 text-[10px] text-red-500">
-                                                Active Engines: SM2, SM3, SM4
+                                            <div class="mt-2 pt-2 border-t border-gray-700">
+                                                <div class="text-[10px] text-rose-400/80 mb-1 font-bold">Hardware Engines:</div>
+                                                <div class="grid grid-cols-2 gap-1 text-[9px]">
+                                                    <div class="flex items-center gap-1"><div class="w-1 h-1 rounded-full bg-rose-500"></div>SM2: Active</div>
+                                                    <div class="flex items-center gap-1"><div class="w-1 h-1 rounded-full bg-rose-500"></div>SM3: IDLE</div>
+                                                    <div class="flex items-center gap-1"><div class="w-1 h-1 rounded-full bg-rose-500"></div>SM4: Busy</div>
+                                                    <div class="flex items-center gap-1"><div class="w-1 h-1 rounded-full bg-rose-500"></div>RNG: Active</div>
+                                                </div>
+                                                <div class="mt-2 flex items-center justify-between text-[9px] text-gray-500 bg-black/20 p-1 rounded">
+                                                    <span>Core Temp:</span>
+                                                    <span class="text-emerald-400">42°C</span>
+                                                </div>
                                             </div>
                                         ` : `
-                                            <div class="mt-1 flex items-center gap-1">
-                                                <div class="w-1.5 h-1.5 rounded-full ${node?.isBlinking ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}"></div>
-                                                <span class="text-[10px]">${node?.isBlinking ? 'RX/TX In-Progress' : 'Standby'}</span>
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-500">Status:</span>
+                                                <span class="${node?.isBlinking ? 'text-emerald-400' : 'text-gray-500'} flex items-center gap-1">
+                                                    <span class="w-1.5 h-1.5 rounded-full ${node?.isBlinking ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600'}"></span>
+                                                    ${node?.isBlinking ? 'Processing' : 'Standby'}
+                                                </span>
+                                            </div>
+                                            <div class="mt-2 pt-1 border-t border-gray-700 flex justify-between text-[9px]">
+                                                <span class="text-gray-500">Throughput:</span>
+                                                <span class="text-sky-400">${Math.round(node?.throughput || 0)} Mbps</span>
                                             </div>
                                         `}
                                     </div>

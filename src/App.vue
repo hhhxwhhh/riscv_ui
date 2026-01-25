@@ -171,22 +171,22 @@ onMounted(() => {
   <div class="app-shell text-gray-100">
     <div class="mx-auto max-w-[1400px] px-6 py-6 flex flex-col gap-6">
       <!-- Header -->
-      <header class="panel panel-glow px-6 py-4 flex flex-col gap-3">
-        <div class="flex items-center justify-between flex-wrap gap-4">
+      <header class="panel panel-glow px-4 py-2.5 flex flex-col gap-2">
+        <div class="flex items-center justify-between flex-wrap gap-2">
           <div class="flex items-center gap-3">
             <div
-              class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-lg">
+              class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-md text-sm">
               R</div>
             <div>
-              <h1 class="text-2xl font-bold tracking-wide">RISC-V 全架构安全网关演示系统</h1>
-              <div class="subtle-text text-sm mt-0.5">面向物联网的全生命周期加解密与身份认证监控</div>
+              <h1 class="text-lg font-bold tracking-wide">RISC-V 全架构安全网关演示系统</h1>
+              <div class="subtle-text text-[11px]">面向物联网的全生命周期加解密与身份认证监控</div>
             </div>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
             <div
-              class="px-3 py-1 rounded-full bg-teal-500/10 text-teal-200 border border-teal-400/30 text-xs font-semibold breathing-glow">
+              class="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-200 border border-teal-400/30 text-[10px] font-semibold breathing-glow">
               LIVE</div>
-            <div class="px-3 py-1 rounded-full text-xs font-semibold border" :class="apiStatus === 'ready'
+            <div class="px-2 py-0.5 rounded-full text-[10px] font-semibold border" :class="apiStatus === 'ready'
               ? 'bg-emerald-500/10 text-emerald-200 border-emerald-400/30'
               : apiStatus === 'loading'
                 ? 'bg-amber-500/10 text-amber-200 border-amber-400/30'
@@ -195,9 +195,10 @@ onMounted(() => {
                   : 'bg-slate-500/10 text-slate-200 border-slate-400/30'">
               API: {{ apiStatus.toUpperCase() }}
             </div>
-            <div class="text-sm subtle-text">
-              Status:
-              <span class="font-mono" :class="wsStatus === 'connected'
+            <div
+              class="px-2 py-0.5 rounded-md bg-slate-800/50 border border-slate-700/50 flex items-center gap-2 text-[10px] subtle-text">
+              <span>Status:</span>
+              <span class="font-mono font-bold" :class="wsStatus === 'connected'
                 ? 'text-emerald-300'
                 : wsStatus === 'connecting'
                   ? 'text-amber-300'
@@ -205,63 +206,65 @@ onMounted(() => {
                 {{ wsStatus.toUpperCase() }}
               </span>
             </div>
-            <div class="text-sm subtle-text">
-              Last Msg:
+            <div
+              class="px-2 py-0.5 rounded-md bg-slate-800/50 border border-slate-700/50 flex items-center gap-2 text-[10px] subtle-text">
+              <span>Last Msg:</span>
               <span class="text-slate-200 font-mono">
                 {{ lastMessageAt ? new Date(lastMessageAt).toLocaleTimeString() : '--' }}
               </span>
             </div>
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
           <transition name="fade-slide" mode="out-in">
-            <div :key="selectedDevices.join(',')" class="panel px-4 py-3">
-              <div class="text-xs uppercase subtle-text">Active Device(s)</div>
-              <div class="text-lg font-semibold text-sky-200 mt-1 truncate">
+            <div :key="selectedDevices.join(',')" class="panel px-3 py-2">
+              <div class="text-[10px] uppercase subtle-text">Active Device(s)</div>
+              <div class="text-base font-semibold text-sky-200 mt-0.5 truncate">
                 {{ selectedDevices.length ? selectedDevices.join(' & ') : 'All Devices' }}
               </div>
             </div>
           </transition>
           <transition name="fade-slide" mode="out-in">
-            <div :key="selectedDeviceIPs.join(',')" class="panel px-4 py-3">
-              <div class="text-xs uppercase subtle-text">Target IP(s)</div>
-              <div class="text-lg font-mono text-slate-200 mt-1 truncate">
+            <div :key="selectedDeviceIPs.join(',')" class="panel px-3 py-2">
+              <div class="text-[10px] uppercase subtle-text">Target IP(s)</div>
+              <div class="text-base font-mono text-slate-200 mt-0.5 truncate">
                 {{ selectedDeviceIPs.length ? selectedDeviceIPs.join(' & ') : 'Global Broadcast' }}
               </div>
             </div>
           </transition>
-          <div class="panel px-4 py-3 border-l-4 border-slate-500/30">
-            <div class="text-xs uppercase subtle-text mb-2">Process Progress</div>
-            <div class="flex items-center gap-1.5 h-7">
+          <div class="panel px-3 py-2 border-l-2 border-slate-500/30">
+            <div class="text-[10px] uppercase subtle-text mb-1.5">Process Progress</div>
+            <div class="flex items-center gap-1 h-5">
               <div v-for="(stage, idx) in STAGES" :key="stage.id"
-                class="flex-1 h-1.5 rounded-full transition-all duration-500"
+                class="flex-1 h-1 rounded-full transition-all duration-500"
                 :class="idx <= currentStageIndex ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]' : 'bg-slate-700'">
               </div>
             </div>
-            <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+            <div class="text-[9px] text-slate-400 mt-0.5 flex justify-between">
               <span>START</span>
-              <span class="text-sky-300 font-bold uppercase">{{ currentStageIndex + 1 }} / {{ STAGES.length }}</span>
+              <span class="text-sky-300 font-bold uppercase">{{ currentStageIndex + 1 }}/{{ STAGES.length }}</span>
               <span>END</span>
             </div>
           </div>
-          <div class="panel px-4 py-3 border-l-4 border-teal-500/50" v-if="currentStage">
+          <div class="panel px-3 py-2 border-l-2 border-teal-500/50" v-if="currentStage">
             <div class="flex items-center justify-between">
-              <div class="text-xs uppercase subtle-text">Communication Stage</div>
-              <button @click="toggleSimulation" class="text-[10px] px-2 py-0.5 rounded border transition-colors"
+              <div class="text-[10px] uppercase subtle-text">Comm Stage</div>
+              <button @click="toggleSimulation" class="text-[9px] px-1.5 py-0.5 rounded border transition-colors"
                 :class="isSimulating ? 'bg-rose-500/20 border-rose-500/50 text-rose-300' : 'bg-sky-500/20 border-sky-500/50 text-sky-300'">
-                {{ isSimulating ? 'STOP SIM' : 'PLAY PROCESS' }}
+                {{ isSimulating ? 'STOP' : 'PLAY' }}
               </button>
             </div>
             <select v-model="currentStageIndex"
-              class="bg-transparent text-teal-200 font-semibold text-lg border-none focus:ring-0 w-full cursor-pointer appearance-none">
+              class="bg-transparent text-teal-200 font-semibold text-base py-0 mt-0.5 border-none focus:ring-0 w-full cursor-pointer appearance-none">
               <option v-for="(stage, idx) in STAGES" :key="stage.id" :value="idx" class="bg-slate-800 text-teal-200">
                 {{ stage.name }}
               </option>
             </select>
           </div>
-          <div class="panel px-4 py-3" v-if="currentStage">
-            <div class="text-xs uppercase subtle-text">Current Status</div>
-            <div class="text-lg font-semibold text-amber-200 mt-1 animate-pulse">{{ currentStage.statusText }}</div>
+          <div class="panel px-3 py-2 border-l-2 border-amber-500/50" v-if="currentStage">
+            <div class="text-[10px] uppercase subtle-text">Current Status</div>
+            <div class="text-base font-semibold text-amber-200 mt-0.5 truncate animate-pulse">{{ currentStage.statusText
+            }}</div>
           </div>
         </div>
       </header>
