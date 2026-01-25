@@ -458,6 +458,7 @@ onMounted(() => {
                     if (sPos && tPos && linesByStage[sid]) {
                         const tput = node.throughput || 100;
                         const flowOpacity = isActive ? Math.max(0.7, Math.min(1, tput / 600)) : 0.05;
+                        const ctx = getStageContext(sid);
 
                         // Internal Loop for DECRYPT stage (Processing inside RISC-V)
                         // In Relay mode, highlight gateway internal activity
@@ -466,7 +467,7 @@ onMounted(() => {
                             const gy = gatewayNode.y;
                             linesByStage[sid].push({
                                 coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
-                                lineStyle: { width: 2, opacity: flowOpacity, color: theme.success }
+                                lineStyle: { width: 2, opacity: flowOpacity, color: ctx.color }
                             });
                         } else {
                             const curve = isGlobal ? 0.2 : (0.1 + (stageIds.indexOf(sid) * 0.15));
@@ -476,7 +477,8 @@ onMounted(() => {
                                 lineStyle: {
                                     width: 1.8,
                                     curveness: isRelayMode ? (node.name === nodeB ? -0.25 : 0.25) : curve,
-                                    opacity: flowOpacity
+                                    opacity: flowOpacity,
+                                    color: ctx.color
                                 }
                             });
                         }

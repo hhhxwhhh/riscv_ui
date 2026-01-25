@@ -215,23 +215,52 @@ setInterval(() => {
   const activeIps = Array.from(activeTransactions.keys());
 
   // Decide whether to start a new transaction or progress one
-  // Roughly 30% chance to start new if not too many active
-  if (Math.random() < 0.3 && activeIps.length < 15) {
-    const availableLinks = devices.filter((d) => !activeTransactions.has(d.ip));
-    if (availableLinks.length > 0) {
-      const randomDevice =
-        availableLinks[Math.floor(Math.random() * availableLinks.length)];
-      activeTransactions.set(randomDevice.ip, {
-        deviceId: randomDevice.id,
-        deviceName: randomDevice.name,
-        deviceIp: randomDevice.ip,
-        stageIndex: 0,
-      });
+  // Aggressive traffic mode: Try to keep 80% of devices active
+  if (activeIps.length < devices.length * 0.8) {
+    // Attempt to start multiple transactions per tick to fill up bandwidth
+    const newTransactionsCount = Math.floor(Math.random() * 3) + 1;
+
+    for (let i = 0; i < newTransactionsCount; i++) {
+      const availableLinks = devices.filter(
+        (d) => !activeTransactions.has(d.ip),
+      );
+      if (availableLinks.length > 0) {
+        const randomDevice =
+          availableLinks[Math.floor(Math.random() * availableLinks.length)];
+        activeTransactions.set(randomDevice.ip, {
+          deviceId: randomDevice.id,
+          deviceName: randomDevice.name,
+          deviceIp: randomDevice.ip,
+          stageIndex: 0,
+          ticksInStage: 0, // Initial delay or status
+        });
+      }
     }
   }
 
   // Progress all active transactions
   activeTransactions.forEach((transaction, ip) => {
+    // Stage logic with variable duration (staggered effect)
+    // Some stages take longer (e.g., DECRYPT on complex hardware)
+    if (transaction.ticksInStage > 0) {
+      transaction.ticksInStage--;
+    } else {
+      // Logic to determine how long the NEXT stage should last
+      const stageDurations = {
+        AUTH: Math.floor(Math.random() * 2), // 0-1 extra ticks
+        ENCRYPT: Math.floor(Math.random() * 2) + 1, // 1-2 extra ticks (data transfer)
+        DECRYPT: Math.floor(Math.random() * 3) + 1, // 1-3 extra ticks (heavy computation)
+        HASH: 0, // Quick finish
+      };
+
+      const currentStageId = STAGE_IDS[transaction.stageIndex];
+      transaction.ticksInStage = stageDurations[currentStageId] || 0;
+
+      // Only move to next stage if we are NOT at the start of current delay
+      // Or simply progress after ticks reach zero (which is handled by this else block)
+      // We will actually progress the index AFTER the payload is sent or during this tick
+    }
+
     const currentStageId = STAGE_IDS[transaction.stageIndex];
     const isLast = transaction.stageIndex === STAGE_IDS.length - 1;
 
@@ -286,10 +315,13 @@ setInterval(() => {
 
     broadcast(payload);
 
-    if (isLast) {
-      activeTransactions.delete(ip);
-    } else {
-      transaction.stageIndex++;
+    // Only progress to next stage or finish if the wait time for current stage is over
+    if (transaction.ticksInStage === 0) {
+      if (isLast) {
+        activeTransactions.delete(ip);
+      } else {
+        transaction.stageIndex++;
+      }
     }
   });
 }, 500);
