@@ -377,9 +377,9 @@ onMounted(() => {
                 if (!isGlobal && !isSelected) return;
 
                 let stagesToShow: string[] = [];
-                if (viewMode.value === 'all') {
+                if (viewMode.value === 'all' || isRelayMode) {
                     if (!isGlobal) {
-                        stagesToShow = stageIds; // Show full cycle for selected devices
+                        stagesToShow = stageIds; // Show full cycle for selected devices or relay mode
                     } else {
                         stagesToShow = [node.stageId]; // Show distributed stages in global view
                     }
@@ -387,27 +387,69 @@ onMounted(() => {
                     stagesToShow = [props.stage.id]; // Strict stage sync
                 }
 
-                stagesToShow.forEach((sid) => {
-                    const isReverse = (sid === 'AUTH');
-                    const isInternal = (sid === 'DECRYPT' || sid === 'HASH');
+                const nodeA = selectedNames[0] || '';
+                const nodeB = selectedNames[1] || '';
 
+                stagesToShow.forEach((sid) => {
                     const gatewayNode = nodes.value.find(n => n.category === 'gateway');
                     if (!gatewayNode) return;
+
+                    const isActive = node.isBlinking || node.throughput > 0;
+                    if (isActive && node.stageId !== sid) return;
 
                     let source = node.name;
                     let target = gatewayNode.name;
 
-                    // Relay Mode Special Logic: 
-                    // If we have A and B, we want A -> Gateway -> B
+                    // Realistic Flow Logic based on stage definitions
+                    // AUTH: Device <-> Gateway (Bidirectional pulse)
+                    // ENCRYPT: Device -> Gateway (Upload)
+                    // DECRYPT: Gateway (Internal Processing)
+                    // HASH: Gateway -> Target (Relay/Forward)
+
                     if (isRelayMode) {
-                        const [nodeA, nodeB] = selectedNames;
-                        if (sid === 'AUTH' || sid === 'ENCRYPT') {
-                            source = nodeA!; target = gatewayNode.name;
+                        const isNodeA = node.name === nodeA;
+                        const isNodeB = node.name === nodeB;
+
+                        // In Relay Mode, the ACTIVE node drives the flow animation for the entire chain
+                        // If Node A is active: A->GW (Auth/Enc) -> GW (Decrypt) -> GW->B (Hash)
+                        // If Node B is active: B->GW (Auth/Enc) -> GW (Decrypt) -> GW->A (Hash)
+
+                        if (isNodeA) {
+                            if (sid === 'AUTH' || sid === 'ENCRYPT') {
+                                source = nodeA; target = gatewayNode.name;
+                            } else if (sid === 'DECRYPT') {
+                                // Handled by Internal Loop logic below (target irrelevant but set to GW for safety)
+                                source = gatewayNode.name; target = gatewayNode.name;
+                            } else if (sid === 'HASH') {
+                                // Final leg: Gateway delivers to the OTHER node
+                                source = gatewayNode.name; target = nodeB;
+                            } else {
+                                return;
+                            }
+                        } else if (isNodeB) {
+                            if (sid === 'AUTH' || sid === 'ENCRYPT') {
+                                source = nodeB; target = gatewayNode.name;
+                            } else if (sid === 'DECRYPT') {
+                                source = gatewayNode.name; target = gatewayNode.name;
+                            } else if (sid === 'HASH') {
+                                source = gatewayNode.name; target = nodeA;
+                            } else {
+                                return;
+                            }
                         } else {
-                            source = gatewayNode.name; target = nodeB!;
+                            return; // Not part of relay
                         }
-                    } else if (!isReverse) {
-                        [source, target] = [target, source];
+                    } else {
+                        // Standard Single Node View
+                        if (sid === 'AUTH') {
+                            // Handshake: often shown as bi-directional or Device->Gateway initiator
+                            source = node.name; target = gatewayNode.name;
+                        } else if (sid === 'ENCRYPT') {
+                            source = node.name; target = gatewayNode.name;
+                        } else if (sid === 'HASH' || sid === 'DECRYPT') {
+                            // After processing, data is "accepted" or "confirmed" (Gateway->Device response)
+                            source = gatewayNode.name; target = node.name;
+                        }
                     }
 
                     const sPos = nodeMap[source];
@@ -415,23 +457,26 @@ onMounted(() => {
 
                     if (sPos && tPos && linesByStage[sid]) {
                         const tput = node.throughput || 100;
-                        const flowOpacity = Math.max(0.2, Math.min(1, tput / 1000));
+                        const flowOpacity = isActive ? Math.max(0.7, Math.min(1, tput / 600)) : 0.05;
 
-                        if (isInternal && !isGlobal && !isRelayMode) {
+                        // Internal Loop for DECRYPT stage (Processing inside RISC-V)
+                        // In Relay mode, highlight gateway internal activity
+                        if (sid === 'DECRYPT' && (isRelayMode || isSelected)) {
                             const gx = gatewayNode.x;
                             const gy = gatewayNode.y;
                             linesByStage[sid].push({
                                 coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
-                                lineStyle: { width: 1.8, opacity: flowOpacity }
+                                lineStyle: { width: 2, opacity: flowOpacity, color: theme.success }
                             });
                         } else {
                             const curve = isGlobal ? 0.2 : (0.1 + (stageIds.indexOf(sid) * 0.15));
+
                             linesByStage[sid].push({
                                 coords: [sPos, tPos],
                                 lineStyle: {
                                     width: 1.8,
-                                    curveness: isRelayMode ? 0.25 : curve,
-                                    opacity: isGlobal ? flowOpacity * 0.7 : flowOpacity
+                                    curveness: isRelayMode ? (node.name === nodeB ? -0.25 : 0.25) : curve,
+                                    opacity: flowOpacity
                                 }
                             });
                         }
@@ -455,8 +500,9 @@ onMounted(() => {
                         avgTput = stageNodes.reduce((acc, n) => acc + n.throughput, 0) / stageNodes.length;
                     }
                 } else {
-                    const selNode = nodes.value.find(n => selectedNames.includes(n.name));
-                    avgTput = selNode?.throughput || 100;
+                    // 修复：寻找当前正在该阶段活跃的节点来决定流动速度
+                    const activeInStage = nodes.value.find(n => selectedNames.includes(n.name) && n.stageId === sid && n.isBlinking);
+                    avgTput = activeInStage ? activeInStage.throughput : 50;
                 }
 
                 // Speed calculation: high throughput = faster particles
@@ -508,9 +554,9 @@ onMounted(() => {
 
                         if (isGlobal && !isGateway && !isActive) return '';
 
-                        // If in Full Cycle mode and no focus, show node's own stage.
-                        // If focused, show global stage (or 'Full Cycle' text).
-                        const sid = (viewMode.value === 'all' && isGlobal)
+                        // Determine which stage to display in the label
+                        // Priority: Node's actual reported stage if it's active or if we're in 'Full Cycle' mode
+                        const sid = (viewMode.value === 'all' || isActive)
                             ? (deviceNode?.stageId || 'AUTH')
                             : props.stage.id;
 
@@ -541,10 +587,19 @@ onMounted(() => {
                     // In global view, dim or hide inactive node icons
                     const opacity = (isGlobal && !isGateway && !isActive) ? 0.2 : 1.0;
 
-                    const sid = isSelected ? props.stage.id : node.stageId;
+                    // Icon color and state should reflect real-time stage if active
+                    const sid = (viewMode.value === 'all' || isActive) ? node.stageId : (isSelected ? props.stage.id : node.stageId);
                     const ctx = getStageContext(sid);
 
                     let color = isGateway ? theme.danger : (isSelected ? ctx.color : (isGlobal ? ctx.color : theme.textMuted));
+
+                    // Realistic Touch: Gateway breathes intensely when RISC-V Crypto acceleration is active
+                    let shadowBlur = isSelected ? 30 : 5;
+                    const isGatewayProcessing = isGateway && nodes.value.some(n => n.isBlinking && (n.stageId === 'DECRYPT' || n.stageId === 'HASH'));
+                    if (isGatewayProcessing) {
+                        shadowBlur = 45; // Enhanced glow for hardware active
+                    }
+
                     if (node.isBlinking && !isGateway) color = theme.warning;
 
                     return {
@@ -555,8 +610,8 @@ onMounted(() => {
                         itemStyle: {
                             opacity: opacity,
                             color: color,
-                            shadowBlur: isSelected ? 30 : 5,
-                            shadowColor: color + (isSelected ? 'B0' : '40')
+                            shadowBlur: shadowBlur,
+                            shadowColor: color + (isSelected || isGatewayProcessing ? 'B0' : '40')
                         },
                         label: {
                             show: opacity > 0.3,
@@ -631,14 +686,39 @@ onMounted(() => {
                     formatter: (params: any) => {
                         if (params.seriesName === 'InteractionLayer') {
                             const node = nodes.value.find(n => n.name === params.name);
-                            const sid = selectedNames.includes(params.name) ? props.stage.id : node?.stageId;
-                            const ctx = getStageContext(sid || 'AUTH');
-                            return `<div class="font-bold">${params.name}</div><div>IP: ${params.value}</div><div class="text-[${ctx.color}] mt-1">Stage: ${ctx.text}</div>`;
+                            const sid = (selectedNames.includes(params.name) && viewMode.value !== 'all') ? props.stage.id : (node?.stageId || 'AUTH');
+                            const ctx = getStageContext(sid);
+                            const isGateway = params.name.includes('Gateway');
+
+                            return `
+                                <div class="px-2 py-1 font-mono text-xs">
+                                    <div class="border-b border-gray-600 pb-1 mb-1 flex justify-between items-center">
+                                        <b class="${isGateway ? 'text-red-400' : 'text-blue-400'}">${params.name}</b>
+                                        <span class="text-[8px] bg-gray-700 px-1 rounded ml-2">Hardware Unit</span>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <div>Addr: <span class="text-gray-300 font-bold">${params.value}</span></div>
+                                        <div>State: <span style="color: ${ctx.color}">${ctx.text}</span></div>
+                                        ${isGateway ? `
+                                            <div class="mt-1 pt-1 border-t border-gray-700 text-[10px] text-red-500">
+                                                Active Engines: SM2, SM3, SM4
+                                            </div>
+                                        ` : `
+                                            <div class="mt-1 flex items-center gap-1">
+                                                <div class="w-1.5 h-1.5 rounded-full ${node?.isBlinking ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}"></div>
+                                                <span class="text-[10px]">${node?.isBlinking ? 'RX/TX In-Progress' : 'Standby'}</span>
+                                            </div>
+                                        `}
+                                    </div>
+                                </div>
+                            `;
                         }
                         return '';
                     },
-                    backgroundColor: 'rgba(31, 41, 55, 0.9)',
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
                     borderColor: theme.grid,
+                    borderWidth: 1,
+                    padding: 0,
                     textStyle: { color: '#f3f4f6' }
                 },
                 xAxis: { show: false, min: 0, max: 800, type: 'value' as const },
