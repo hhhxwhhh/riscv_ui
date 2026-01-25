@@ -53,13 +53,16 @@ const updateChart = () => {
     }
     if (!chartInstance) return;
 
-    chartInstance.setOption({
-        series: [
-            { data: [stats.value.standard[0]] },  // Top: Throughput Std
-            { data: [stats.value.custom[0]] },    // Top: Throughput Cust
-            { data: [stats.value.standard[2]] },  // Bottom: Score Std
-            { data: [stats.value.custom[2]] }     // Bottom: Score Cust
-        ]
+    requestAnimationFrame(() => {
+        if (!chartInstance) return;
+        chartInstance.setOption({
+            series: [
+                { data: [stats.value.standard[0]] },  // Top: Throughput Std
+                { data: [stats.value.custom[0]] },    // Top: Throughput Cust
+                { data: [stats.value.standard[2]] },  // Bottom: Score Std
+                { data: [stats.value.custom[2]] }     // Bottom: Score Cust
+            ]
+        });
     });
 };
 
@@ -140,7 +143,10 @@ const handleResize = () => {
 
 onUnmounted(() => {
     window.removeEventListener('resize', handleResize);
-    chartInstance?.dispose();
+    if (chartInstance) {
+        chartInstance.dispose();
+        chartInstance = null;
+    }
 });
 </script>
 

@@ -235,6 +235,33 @@ setInterval(() => {
     const currentStageId = STAGE_IDS[transaction.stageIndex];
     const isLast = transaction.stageIndex === STAGE_IDS.length - 1;
 
+    // Simulate different traffic patterns based on device characteristics
+    // Some devices are high-performance (multipliers), some are low-power
+    const deviceHash = transaction.deviceName.charCodeAt(
+      transaction.deviceName.length - 1,
+    );
+    const trafficProfile = deviceHash % 3; // 0: Low, 1: Normal, 2: High/Burst
+
+    let baseTp, rangeTp;
+    if (trafficProfile === 0) {
+      baseTp = 50;
+      rangeTp = 150; // Low power sensor
+    } else if (trafficProfile === 1) {
+      baseTp = 400;
+      rangeTp = 400; // Normal node
+    } else {
+      baseTp = 800;
+      rangeTp = 800; // High speed terminal or camera
+    }
+
+    // Add random noise and stage-specific variations
+    // Encryption/Decryption might be slightly slower/heavier in some contexts
+    const stageMultiplier =
+      currentStageId === "ENCRYPT" || currentStageId === "DECRYPT" ? 0.9 : 1.1;
+    const finalThroughput = Math.floor(
+      (baseTp + Math.random() * rangeTp) * stageMultiplier,
+    );
+
     const payload = {
       type: "telemetry",
       deviceId: transaction.deviceId,
@@ -243,11 +270,18 @@ setInterval(() => {
       stageId: currentStageId,
       isLastStage: isLast,
       metrics: {
-        throughput: Math.floor(600 + Math.random() * 300),
-        latency: Number((0.8 + Math.random() * 1.6).toFixed(2)),
-        securityScore: Math.floor(85 + Math.random() * 10),
+        throughput: finalThroughput,
+        latency: Number((0.4 + Math.random() * 2.5).toFixed(2)),
+        securityScore: Math.floor(88 + Math.random() * 12),
       },
       ts: Date.now(),
+    };
+
+    // Update the latest global metrics for REST API consistency
+    latestMetrics = {
+      throughput: payload.metrics.throughput,
+      latency: payload.metrics.latency,
+      securityScore: payload.metrics.securityScore,
     };
 
     broadcast(payload);

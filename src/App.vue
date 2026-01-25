@@ -66,19 +66,25 @@ const handleWsStatus = (status: 'connecting' | 'connected' | 'disconnected') => 
 };
 
 const handleWsLastMessage = (timestamp: number) => {
-  lastMessageAt.value = timestamp;
+  // Throttle updates to lastMessageAt to avoid excessive re-renders
+  if (!lastMessageAt.value || timestamp - lastMessageAt.value > 1000) {
+    lastMessageAt.value = timestamp;
+  }
 };
 
 const handleTelemetry = (packet: any) => {
+  if (!packet) return;
+
   // 补全：处理设备动态加入/退出消息
-  if (packet.type === 'device_join') {
-    if (!devices.value.find(d => d.ip === packet.device.ip)) {
-      devices.value.push(packet.device);
+  if (packet.type === 'device_join' && packet.device) {
+    const exists = devices.value.find(d => d.ip === packet.device.ip || d.name === packet.device.name);
+    if (!exists) {
+      devices.value = [...devices.value, packet.device];
     }
     return;
   }
   if (packet.type === 'device_exit') {
-    devices.value = devices.value.filter(d => d.ip !== packet.ip);
+    devices.value = devices.value.filter(d => d.ip !== packet.ip && d.name !== packet.name);
     // 同步更新选中状态
     if (selectedDevices.value.includes(packet.name)) {
       selectedDevices.value = selectedDevices.value.filter(n => n !== packet.name);
@@ -114,7 +120,11 @@ const loadDevices = async (isBackground = false) => {
     }));
 
     if (newDevices.length > 0) {
-      devices.value = newDevices;
+      // Comparison to avoid unnecessary re-assignment
+      const sameLength = newDevices.length === devices.value.length;
+      if (!sameLength || JSON.stringify(newDevices) !== JSON.stringify(devices.value)) {
+        devices.value = newDevices;
+      }
     }
 
     // 同步选择状态：移除已不在列表中的设备

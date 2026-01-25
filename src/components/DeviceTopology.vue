@@ -86,11 +86,17 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
         };
     });
 
-    const deviceList = (devices && devices.length) ? devices : defaultDevices;
-    const positions = calculatePositions(deviceList.length);
-
     const gatewayName = 'A100 Gateway';
-    const prevGateway = previousState.get(gatewayName);
+    // Filter and deduplicate: Remove any device that matches the gateway name or has a duplicate name
+    const seenNames = new Set([gatewayName]);
+    const deviceList = ((devices && devices.length) ? devices : defaultDevices)
+        .filter(device => {
+            if (!device.name || seenNames.has(device.name)) return false;
+            seenNames.add(device.name);
+            return true;
+        });
+
+    const positions = calculatePositions(deviceList.length);
 
     const gateway = {
         name: gatewayName,
@@ -98,9 +104,9 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
         y: 200,
         value: '192.168.1.1',
         category: 'gateway',
-        isBlinking: prevGateway?.isBlinking || false,
+        isBlinking: previousState.get(gatewayName)?.isBlinking || false,
         stageId: props.stage.id || 'AUTH',
-        throughput: prevGateway?.throughput || 100,
+        throughput: previousState.get(gatewayName)?.throughput || 100,
         description: 'Secure RISC-V Cryptoverse Hub'
     };
 
@@ -124,14 +130,6 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
 
 buildNodesFromDevices(props.devices);
 
-// Watch for device list changes from parent/API
-watch(() => props.devices, (newDevices) => {
-    buildNodesFromDevices(newDevices);
-    if (chartInstance && optionBuilder) {
-        chartInstance.setOption(optionBuilder(selectedNodeNames.value));
-    }
-}, { deep: true });
-
 // ----------------------------------------------------------------------
 // Real Data Interface
 // ----------------------------------------------------------------------
@@ -154,21 +152,29 @@ let reconnectAttempts = 0;
 let isDisposed = false;
 
 const scheduleRender = () => {
-    if (!chartInstance || !optionBuilder || renderQueued) return;
+    if (!chartInstance || !optionBuilder || renderQueued || isDisposed) return;
     renderQueued = true;
     requestAnimationFrame(() => {
         renderQueued = false;
-        chartInstance?.setOption(optionBuilder!(selectedNodeNames.value));
+        if (isDisposed || !chartInstance) return;
+        try {
+            chartInstance.setOption(optionBuilder!(selectedNodeNames.value));
+        } catch (err) {
+            console.error('Error during ECharts render:', err);
+        }
     });
 };
 
 const handleIncomingPacket = (packet: TelemetryPacket) => {
+    if (isDisposed) return;
     emit('ws-last-message', Date.now());
     emit('telemetry', packet);
 
     // 修复：如果不是普通的遥测数据（例如设备加入/退出消息），则跳过后续的节点更新逻辑
     if (!packet?.source || packet.type === 'device_join' || packet.type === 'device_exit') return;
-    const targetNode = nodes.value.find(n => n.value.includes(packet.source));
+
+    // Use value (IP) to find node
+    const targetNode = nodes.value.find(n => n.value === packet.source || n.value.includes(packet.source));
 
     if (targetNode) {
         // Update stage if provided (lifecycle logic)
@@ -299,9 +305,9 @@ const toSvgDataUrl = (svg: string, color: string) => {
 const deviceNodes = computed(() => nodes.value.filter(node => node.category === 'device'));
 
 const applySelection = (names: string[]) => {
-    if (!chartInstance || !optionBuilder) return;
+    if (!chartInstance || !optionBuilder || isDisposed) return;
     selectedNodeNames.value = names;
-    chartInstance.setOption(optionBuilder(names));
+    scheduleRender();
 };
 
 const selectNode = (name: string) => {
@@ -409,7 +415,6 @@ onMounted(() => {
 
                     if (sPos && tPos && linesByStage[sid]) {
                         const tput = node.throughput || 100;
-                        const flowWidth = 1.5 + (tput / 150);
                         const flowOpacity = Math.max(0.2, Math.min(1, tput / 1000));
 
                         if (isInternal && !isGlobal && !isRelayMode) {
@@ -417,13 +422,14 @@ onMounted(() => {
                             const gy = gatewayNode.y;
                             linesByStage[sid].push({
                                 coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
-                                lineStyle: { width: flowWidth * 1.2, opacity: flowOpacity }
+                                lineStyle: { width: 1.8, opacity: flowOpacity }
                             });
                         } else {
                             const curve = isGlobal ? 0.2 : (0.1 + (stageIds.indexOf(sid) * 0.15));
                             linesByStage[sid].push({
                                 coords: [sPos, tPos],
                                 lineStyle: {
+                                    width: 1.8,
                                     curveness: isRelayMode ? 0.25 : curve,
                                     opacity: isGlobal ? flowOpacity * 0.7 : flowOpacity
                                 }
@@ -676,7 +682,13 @@ onUnmounted(() => {
     isDisposed = true;
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
-    chartInstance?.dispose();
+
+    if (chartInstance) {
+        chartInstance.dispose();
+        chartInstance = null;
+    }
+    optionBuilder = null;
+
     if (socket) {
         socket.close();
         socket = null;
