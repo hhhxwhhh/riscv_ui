@@ -797,17 +797,6 @@ onMounted(() => {
                                 type: 'rect',
                                 shape: { width: 360, height: 90, r: 6 },
                                 style: { fill: 'rgba(31, 41, 55, 0.95)', stroke: currentCtx.color, lineWidth: 2.5 }
-                            },
-                            {
-                                type: 'text',
-                                style: {
-                                    text: `TARGET: ${selectedNames.length ? (selectedNames.join(' & ').length > 30 ? selectedNames.join(' & ').substring(0, 27) + '...' : selectedNames.join(' & ')) : 'ALL_NODES'}\nPHASE: ${props.stage.name.toUpperCase()}\nSECURITY: ${isRelayMode ? 'RELAY_PROTECTION_ACTIVE' : 'STANDARD_TRAFFIC_MONITOR'}`,
-                                    fill: '#f3f4f6',
-                                    font: 'bold 12px monospace',
-                                    lineHeight: 20
-                                },
-                                left: 18,
-                                top: 18
                             }
                         ]
                     }
