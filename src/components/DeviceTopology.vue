@@ -807,7 +807,7 @@ onMounted(() => {
                                         `IO: ${nodes.value.filter(n => n.isBlinking).length} Act / ${nodes.value.length} Node`,
                                         `Throughput: ${Math.round(gatewayThroughput.value)} Mbps`,
                                         `Processing Rate: ${(gatewayThroughput.value / 8).toFixed(1)} MB/s`,
-                                        `GATEWAY SPEEDUP: ${(gatewayThroughput.value / 300).toFixed(1)}x`,
+                                        `GATEWAY SPEEDUP: ${(gatewayThroughput.value / 800).toFixed(1)}x`,
                                         `STATUS: LIVE-STREAMING`,
                                         `RISC-V: HARDWARE-ACCEL`,
                                     ].join('\n'),
