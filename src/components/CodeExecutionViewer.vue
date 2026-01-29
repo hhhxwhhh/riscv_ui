@@ -247,30 +247,7 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <!-- CPU Registers Info Panel -->
-        <div
-            class="grid grid-cols-5 gap-2 bg-slate-900/70 p-3 rounded border border-slate-700/60 font-mono text-[10px] text-gray-300">
-            <div class="flex flex-col border-r border-slate-800 pr-2">
-                <span class="text-gray-500 mb-1">INSTR_PTR (PC)</span>
-                <span class="text-amber-300 text-xs">{{ registers.pc }}</span>
-            </div>
-            <div class="flex flex-col border-r border-slate-800 pr-2">
-                <span class="text-gray-500 mb-1">REGISTER A0</span>
-                <span class="text-sky-300 text-xs">{{ registers.a0 }}</span>
-            </div>
-            <div class="flex flex-col border-r border-slate-800 pr-2">
-                <span class="text-gray-500 mb-1">TOTAL CYCLES</span>
-                <span class="text-violet-300 text-xs">{{ cycleCount }}</span>
-            </div>
-            <div class="flex flex-col border-r border-slate-800 pr-2">
-                <span class="text-teal-500/80 mb-1">HW SAVED CYCLES</span>
-                <span class="text-teal-400 font-bold text-xs">+{{ savedCycles }}</span>
-            </div>
-            <div class="flex flex-col">
-                <span class="text-gray-500 mb-1">PIPELINE STATUS</span>
-                <span class="text-teal-300 font-bold animate-pulse text-xs">{{ registers.process }}</span>
-            </div>
-        </div>
+        <!-- 已移除底部寄存器信息面板 -->
     </div>
 </template>
 
