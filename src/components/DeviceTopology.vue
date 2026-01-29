@@ -131,6 +131,8 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
     const deviceNodes = deviceList.map((device, index) => {
         const pos = positions[index] || { x: 0, y: 0 };
         const prevState = previousState.get(device.name);
+        // 更真实的默认吞吐量（1~10Mbps，随机分布，稍后统一降为十分之一）
+        const defaultTput = Math.floor(Math.random() * 10) + 1;
         return {
             name: device.name,
             x: pos.x,
@@ -139,7 +141,7 @@ const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
             category: 'device',
             isBlinking: prevState?.isBlinking || false,
             stageId: prevState?.stageId || stageIds[index % stageIds.length] || 'AUTH',
-            throughput: prevState?.throughput || 0 // Default to 0 for devices
+            throughput: prevState?.throughput || defaultTput
         };
     });
 
@@ -204,7 +206,7 @@ const handleIncomingPacket = (packet: TelemetryPacket) => {
         if (packet.metrics && typeof packet.metrics === 'object') {
             const m = packet.metrics as any;
             if (m.throughput) {
-                targetNode.throughput = Number(m.throughput);
+                targetNode.throughput = Number(m.throughput) / 10;
             }
         }
 
