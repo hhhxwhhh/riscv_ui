@@ -3,7 +3,6 @@ import { onMounted, ref, onUnmounted, watch, computed } from 'vue';
 import * as echarts from 'echarts';
 import type { StageInfo } from '../api/stages';
 import gatewaySvgRaw from '../svgs/gateway.svg?raw';
-import deviceSvgRaw from '../svgs/computer.svg?raw';
 
 type DeviceInfo = {
     id?: string;
@@ -30,6 +29,25 @@ const selectedNodeNames = ref<string[]>(
 
 const viewMode = ref<'stage' | 'device' | 'all'>('stage');
 let optionBuilder: ((selectedNames: string[]) => echarts.EChartsOption) | null = null;
+
+// 计算网关实时吞吐量
+const gatewayThroughput = computed(() => {
+    return deviceNodes.value.reduce((sum, node) => sum + (node.throughput || 0), 0);
+});
+
+// 根据吞吐量计算网关颜色（从浅红到深红）
+const getGatewayColor = (throughput: number) => {
+    // 定义最大吞吐量阈值，用于确定颜色深度
+    const maxExpectedThroughput = 5000; // 可根据实际情况调整
+    const intensity = Math.min(1, throughput / maxExpectedThroughput); // 确保强度不超过1
+
+    // 计算从浅红到深红的变化
+    const red = 255;
+    const green = Math.floor(255 * (1 - intensity * 0.7)); // 绿色随吞吐量增加而减少
+    const blue = Math.floor(255 * (1 - intensity * 0.7)); // 蓝色随吞吐量增加而减少
+    return `rgb(${red}, ${green}, ${blue})`;
+};
+
 
 // Define Nodes Configuration (Made Reactive for Real Data updates)
 // We add 'isBlinking' state to track activity and stageId for individual flow status
@@ -258,22 +276,18 @@ const startDataListener = () => {
             console.error('WebSocket error:', err);
         };
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
             if (isDisposed) return;
             emit('ws-status', 'disconnected');
-            console.warn('WebSocket closed. Reconnecting...');
+            console.warn('WebSocket closed. Code:', event.code, 'Reason:', event.reason, 'Reconnecting...');
             scheduleReconnect();
         };
     } catch (err) {
         emit('ws-status', 'disconnected');
-        console.error('Failed to confirm WebSocket connection:', err);
+        console.error('Failed to establish WebSocket connection:', err);
+        // 即使连接失败也要尝试重连
         scheduleReconnect();
     }
-};
-
-const IconsPaths = {
-    gateway: gatewaySvgRaw,
-    device: deviceSvgRaw
 };
 
 const theme = {
@@ -286,20 +300,6 @@ const theme = {
     line: '#1f3b72',
     lineReturn: '#0f4c3a',
     textMuted: '#94a3b8'
-};
-
-const toBase64 = (value: string) => window.btoa(unescape(encodeURIComponent(value)));
-
-const toSvgDataUrl = (svg: string, color: string) => {
-    const cleaned = svg
-        .replace(/<\?xml[^>]*>/gi, '')
-        .replace(/<!DOCTYPE[^>]*>/gi, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-    const withColor = cleaned
-        .replace(/fill="[^"]*"/g, `fill="${color}"`)
-        .replace(/stroke="[^"]*"/g, `stroke="${color}"`);
-    return `image://data:image/svg+xml;base64,${toBase64(withColor)}`;
 };
 
 const deviceNodes = computed(() => nodes.value.filter(node => node.category === 'device'));
@@ -500,7 +500,15 @@ onMounted(() => {
 
             const coreGateway = nodes.value.find(n => n.category === 'gateway');
             if (coreGateway) {
-                // Core Pulse Rings
+                // Core Pulse Rings - 根据吞吐量调整颜色和脉冲频率
+                const maxThroughput = 3000;
+                const throughputIntensity = Math.min(1, gatewayThroughput.value / maxThroughput);
+                const redValue = Math.floor(255 * (0.6 + 0.4 * throughputIntensity));
+                const greenValue = Math.floor(113 * (1 - 0.6 * throughputIntensity));
+                const gatewayColor = `rgb(${redValue}, ${greenValue}, 133)`;
+                const alphaValue = 0.1 + 0.2 * throughputIntensity; // 基础透明度随负载增加
+
+                // 主要脉冲环 - 颜色、大小和周期都随吞吐量变化
                 series.push({
                     type: 'effectScatter',
                     coordinateSystem: 'cartesian2d',
@@ -509,17 +517,44 @@ onMounted(() => {
                         name: 'Gateway Pulse',
                         value: [coreGateway.x, coreGateway.y]
                     }],
-                    symbolSize: 120,
+                    symbolSize: 100 + 40 * throughputIntensity, // 负载越高，脉冲环越大
                     showEffectOn: 'render',
                     rippleEffect: {
                         brushType: 'stroke',
                         scale: 1.5,
-                        period: 4
+                        period: 3.5 - 1.5 * throughputIntensity, // 负载越高，脉冲越快
+                        color: gatewayColor
                     },
                     itemStyle: {
-                        color: 'rgba(251, 113, 133, 0.15)',
+                        color: `rgba(${redValue}, ${greenValue}, 133, ${alphaValue})`,
                         shadowBlur: 15,
-                        shadowColor: theme.danger
+                        shadowColor: gatewayColor
+                    },
+                    z: 0
+                });
+
+                // 添加额外的脉冲环，以增强视觉效果 - 也随吞吐量变化
+                series.push({
+                    type: 'effectScatter',
+                    coordinateSystem: 'cartesian2d',
+                    silent: true,
+                    data: [{
+                        name: 'Gateway Secondary Pulse',
+                        value: [coreGateway.x, coreGateway.y]
+                    }],
+                    symbolSize: 140 + 60 * throughputIntensity, // 大小随负载变化
+                    showEffectOn: 'render',
+                    rippleEffect: {
+                        brushType: 'stroke',
+                        scale: 2,
+                        period: 5 - 2 * throughputIntensity, // 周期随负载变化
+                        color: gatewayColor
+                    },
+                    itemStyle: {
+                        color: 'transparent',
+                        borderColor: gatewayColor,
+                        borderWidth: 1,
+                        opacity: 0.2 + 0.2 * throughputIntensity // 透明度随负载增加
                     },
                     z: 0
                 });
@@ -532,17 +567,32 @@ onMounted(() => {
                 layout: 'none',
                 silent: true,
                 z: 0,
-                data: Array.from({ length: 25 }, () => ({
-                    x: Math.random() * 800,
-                    y: Math.random() * 400,
-                    symbolSize: Math.random() * 2 + 0.5,
-                    itemStyle: { color: 'rgba(125, 211, 252, 0.1)' }
-                })),
-                links: Array.from({ length: 20 }, () => ({
-                    source: Math.floor(Math.random() * 25),
-                    target: Math.floor(Math.random() * 25),
-                    lineStyle: { color: 'rgba(125, 211, 252, 0.03)', width: 0.5 }
-                }))
+                // 为每个节点添加脉冲效果
+                data: nodes.value.map((node, idx) => {
+                    if (node.category === 'gateway') return null; // 不为网关添加装饰节点
+
+                    // 计算围绕每个节点的装饰点
+                    const angle = (idx * 137.5) % 360; // 黄金角度，避免重叠
+                    const distance = 15 + (idx % 5) * 5; // 随机距离
+                    const x = node.x + Math.cos(angle) * distance;
+                    const y = node.y + Math.sin(angle) * distance;
+
+                    return {
+                        x: x,
+                        y: y,
+                        symbolSize: Math.random() * 1.5 + 0.5,
+                        itemStyle: {
+                            color: 'rgba(125, 211, 252, 0.2)',
+                            // 添加脉冲动画
+                            shadowBlur: 5,
+                            shadowColor: 'rgba(125, 211, 252, 0.4)'
+                        }
+                    };
+                }).filter(Boolean), // 过滤掉null值
+                links: [],
+                itemStyle: {
+                    opacity: 0.5
+                }
             });
 
             // 1. Multi-stage Traffic Lines
@@ -628,7 +678,7 @@ onMounted(() => {
                             prefix = selectedNames.indexOf(p.name) === 0 ? '【SOURCE】' : '【TARGET】';
                         }
 
-                        if (isGateway) return `{name|${p.name}}\n{stage|${props.stage.id}}`;
+                        if (isGateway) return `{name|${p.name}}\n{tput|Total Throughput: ${Math.round(gatewayThroughput.value)} Mbps}\n{stage|${props.stage.id}}`;
                         return `{name|${prefix}${p.name}}\n{ip|${p.value}}\n{tput|${tput}}\n{badge| ${ctx.text} }`;
                     },
                     rich: {
@@ -651,7 +701,7 @@ onMounted(() => {
                     const sid = (viewMode.value === 'all' || isActive) ? node.stageId : (isSelected ? props.stage.id : node.stageId);
                     const ctx = getStageContext(sid);
 
-                    let color = isGateway ? theme.danger : (isSelected ? ctx.color : (isGlobal ? ctx.color : theme.textMuted));
+                    let color = isGateway ? getGatewayColor(gatewayThroughput.value) : (isSelected ? ctx.color : (isGlobal ? ctx.color : theme.textMuted));
 
                     // Realistic Touch: Gateway breathes intensely when RISC-V Crypto acceleration is active
                     let shadowBlur = isSelected ? 30 : 5;
@@ -660,18 +710,21 @@ onMounted(() => {
                         shadowBlur = 45; // Enhanced glow for hardware active
                     }
 
-                    if (node.isBlinking && !isGateway) color = theme.warning;
+                    if (node.isBlinking && !isGateway) {
+                        color = theme.warning;
+                        shadowBlur = 25;
+                    }
 
                     return {
                         ...node,
-                        symbol: toSvgDataUrl(isGateway ? IconsPaths.gateway : IconsPaths.device, color),
-                        symbolKeepAspect: true,
-                        symbolSize: isGateway ? 55 : (isSelected ? 50 : (nodes.value.length > 40 ? 22 : 35)),
+                        symbol: isGateway ? 'image://' + gatewaySvgRaw : 'circle', // 对于非网关节点使用圆形
+                        symbolKeepAspect: false,
+                        symbolSize: isGateway ? 55 : (isSelected ? 12 : 8), // 调整符号大小
                         itemStyle: {
                             opacity: opacity,
                             color: color,
                             shadowBlur: shadowBlur,
-                            shadowColor: color + (isSelected || isGatewayProcessing ? 'B0' : '40')
+                            shadowColor: `${color}${isSelected || isGatewayProcessing || node.isBlinking ? 'B0' : '40'})`
                         },
                         label: {
                             show: opacity > 0.3,
@@ -707,8 +760,6 @@ onMounted(() => {
                 z: 10
             });
 
-            const currentCtx = getStageContext(props.stage.id);
-
             return {
                 title: {
                     text: isRelayMode ? 'End-to-End Relay Security Inspection' : 'Multi-Flow Security Stage Monitor',
@@ -725,7 +776,7 @@ onMounted(() => {
                         children: [
                             {
                                 type: 'rect',
-                                shape: { width: 220, height: 120, r: 4 },
+                                shape: { width: 220, height: 180, r: 4 }, // Adjusted height to accommodate new content
                                 style: { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(125, 211, 252, 0.4)', lineWidth: 2 }
                             },
                             {
@@ -752,6 +803,8 @@ onMounted(() => {
                                         `PROTO: SM4-CBC/CTR-V2.0`,
                                         `AUTH: SM2-ID-CERT-V1.28`,
                                         `IO: ${nodes.value.filter(n => n.isBlinking).length} Act / ${nodes.value.length} Node`,
+                                        `Throughput: ${Math.round(gatewayThroughput.value)} Mbps`,
+                                        `Processing Rate: ${(gatewayThroughput.value / 8).toFixed(1)} MB/s`,
                                         `STATUS: LIVE-STREAMING`,
                                         `RISC-V: HARDWARE-ACCEL`
                                     ].join('\n'),
@@ -762,33 +815,9 @@ onMounted(() => {
                                 left: 15,
                                 top: 35
                             },
-                            {
-                                type: 'rect',
-                                shape: { width: 190, height: 3 },
-                                style: { fill: 'rgba(52, 211, 153, 0.1)' },
-                                left: 15,
-                                top: 105
-                            },
-                            {
-                                type: 'rect',
-                                shape: { width: 160, height: 3 },
-                                style: { fill: '#34d399' },
-                                left: 15,
-                                top: 105
-                            }
+
                         ]
-                    },
-                    {
-                        type: 'text',
-                        right: 20,
-                        top: 20,
-                        style: {
-                            text: 'ZONE-A1 MONITOR // RC-01',
-                            fill: 'rgba(148, 163, 184, 0.5)',
-                            font: '9px monospace'
-                        }
-                    },
-                    // 已移除左下角中国状态框
+                    }
                 ],
                 tooltip: {
                     trigger: 'item' as const,
@@ -823,13 +852,12 @@ onMounted(() => {
                                             <span class="text-gray-500">Payload:</span>
                                             <span class="text-gray-300">${data.throughput ? (data.throughput / 8).toFixed(1) : 0} MB/s</span>
                                         </div>
-                                        <div class="mt-2 pt-1 border-t border-gray-700/50 flex items-center justify-between">
+                                        <div class="mt-2 pt-1 border-t border-gray-700 flex items-center justify-between">
                                             <span class="text-[9px] text-gray-500 italic">Current Phase:</span>
                                             <span style="color: ${ctx.color}" class="text-[10px] font-bold uppercase">${data.stageName}</span>
                                         </div>
                                     </div>
-                                </div>
-                            `;
+                                `;
                         }
 
                         if (params.seriesName === 'InteractionLayer') {
