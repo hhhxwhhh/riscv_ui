@@ -371,7 +371,7 @@ onMounted(() => {
             nodes.value.forEach(node => {
                 if (node.category === 'gateway') return;
 
-                const isActive = node.isBlinking || node.throughput > 0;
+                // 已不再需要 isActive 变量
                 const isSelected = selectedNames.includes(node.name);
 
                 // 全局视图下不再限制，只在非全局视图下过滤未选中节点
