@@ -694,39 +694,31 @@ onMounted(() => {
                 data: nodes.value.map(node => {
                     const isGateway = node.name.includes('Gateway');
                     const isSelected = selectedNames.includes(node.name);
-
                     const isActive = node.isBlinking || node.throughput > 0;
-                    // In global view, dim or hide inactive node icons
                     const opacity = (isGlobal && !isGateway && !isActive) ? 0.2 : 1.0;
-
-                    // Icon color and state should reflect real-time stage if active
                     const sid = (viewMode.value === 'all' || isActive) ? node.stageId : (isSelected ? props.stage.id : node.stageId);
                     const ctx = getStageContext(sid);
-
                     let color = isGateway ? getGatewayColor(gatewayThroughput.value) : (isSelected ? ctx.color : (isGlobal ? ctx.color : theme.textMuted));
-
-                    // Realistic Touch: Gateway breathes intensely when RISC-V Crypto acceleration is active
                     let shadowBlur = isSelected ? 30 : 5;
                     const isGatewayProcessing = isGateway && nodes.value.some(n => n.isBlinking && (n.stageId === 'DECRYPT' || n.stageId === 'HASH'));
                     if (isGatewayProcessing) {
-                        shadowBlur = 45; // Enhanced glow for hardware active
+                        shadowBlur = 45;
                     }
-
                     if (node.isBlinking && !isGateway) {
                         color = theme.warning;
                         shadowBlur = 25;
                     }
-
+                    // 只为网关节点渲染SVG，其余全部为实心小圆点
                     return {
                         ...node,
-                        symbol: isGateway ? 'image://' + gatewaySvgRaw : 'circle', // 对于非网关节点使用圆形
-                        symbolKeepAspect: false,
-                        symbolSize: isGateway ? 55 : (isSelected ? 12 : 8), // 调整符号大小
+                        symbol: isGateway ? 'image://' + gatewaySvgRaw : 'circle',
+                        symbolKeepAspect: isGateway,
+                        symbolSize: isGateway ? 55 : 16, // 放大终端节点圆点
                         itemStyle: {
-                            opacity: opacity,
-                            color: color,
-                            shadowBlur: shadowBlur,
-                            shadowColor: `${color}${isSelected || isGatewayProcessing || node.isBlinking ? 'B0' : '40'})`
+                            opacity: 1, // 终端节点始终完全可见
+                            color: !isGateway ? '#00eaff' : color, // 终端节点高亮为亮青色
+                            shadowBlur: isGateway ? shadowBlur : 0,
+                            shadowColor: isGateway ? `${color}${isSelected || isGatewayProcessing || node.isBlinking ? 'B0' : '40'})` : undefined
                         },
                         label: {
                             show: opacity > 0.3,
