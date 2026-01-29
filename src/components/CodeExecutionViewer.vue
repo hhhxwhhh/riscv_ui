@@ -42,32 +42,33 @@ const standardInstructions = computed(() => {
     return [];
 });
 
-// 当前选中的自定义指令索引
+// 获取当前选中的自定义指令索引
 const selectedCustomIdx = ref<number | null>(null);
-
-// 获取当前自定义指令详细内容
-const customDetail = computed(() => {
-    if (selectedCustomIdx.value === null) return '';
-    const item = customInstructions.value[selectedCustomIdx.value];
-    return item?.detail || '';
-});
 
 // 多选自定义指令支持高亮联动
 const hoveredCustomIdx = ref<number | null>(null);
-const hoveredStandardIdx = ref<number | null>(null);
 
 // 计算分组展示数据
-const groupedStandardInstructions = computed(() => {
-    return customInstructions.value.map((item, idx) => ({
-        customIdx: idx,
-        customText: item.text,
-        mappedStandardIdxs: item.mappedStandardIdxs,
-    }));
-});
+// const groupedStandardInstructions = computed(() => {
+//     return customInstructions.value.map((item, idx) => ({
+//         customIdx: idx,
+//         customText: item.text,
+//         mappedStandardIdxs: item.mappedStandardIdxs,
+//     }));
+// });
 
 // 获取当前类型的性能指标
+const reductionRate = computed(() => {
+    const stdCount = standardInstructions.value.length;
+    const custCount = customInstructions.value.filter(i => !i.text.startsWith('#')).length;
+    if (stdCount === 0) return 0;
+    return Math.round((1 - custCount / stdCount) * 100);
+});
 
-
+const handleCustomHover = (cIdx: number | null) => {
+    hoveredCustomIdx.value = cIdx;
+    // 不再在这里设置 hoveredStandardIdx，而是通过 computed 样式判断
+};
 </script>
 
 <template>
@@ -76,14 +77,20 @@ const groupedStandardInstructions = computed(() => {
             <div class="flex flex-col">
                 <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
                     <Cpu class="w-5 h-5 text-sky-400" />
-                    指令流与内容展示
+                    指令流对比与加速展示
                 </h2>
+                <div class="flex items-center gap-4 text-[10px] font-mono mt-1 opacity-80">
+                    <div class="flex items-center gap-1">
+                        <span class="text-gray-500">REDUCTION:</span>
+                        <span class="text-rose-400 font-bold">{{ reductionRate }}%</span>
+                    </div>
+                </div>
             </div>
             <div class="flex items-center gap-2">
                 <button @click="showFullCode = true"
                     class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
                     <FileCode class="w-4 h-4" />
-                    查看完整代码
+                    查看完整源码
                 </button>
             </div>
         </div>
@@ -161,60 +168,101 @@ const groupedStandardInstructions = computed(() => {
                 </div>
             </transition>
 
-            <!-- 左侧：分组展示自定义指令及其标准指令列表，高亮联动 -->
+            <!-- 左侧：标准指令流（Legacy） -->
             <div class="flex flex-col border-r border-gray-700/80 pr-2">
-                <h3 class="text-lg font-semibold text-rose-300 mb-2">标准指令分组展示</h3>
-                <div class="flex-1 font-mono text-sm bg-slate-900/70 p-2 rounded relative custom-scrollbar"
-                    style="max-height: 60vh; overflow-y: auto;">
-                    <div v-for="group in groupedStandardInstructions" :key="'group-' + group.customIdx" class="mb-4">
-                        <div class="font-bold text-teal-400 mb-1 flex items-center">
-                            <span @mouseenter="hoveredCustomIdx = group.customIdx" @mouseleave="hoveredCustomIdx = null"
-                                :class="{ 'underline': hoveredCustomIdx === group.customIdx }">{{ group.customText
-                                }}</span>
-                        </div>
-                        <div class="pl-4">
-                            <div v-for="sIdx in group.mappedStandardIdxs" :key="'std-' + sIdx"
-                                class="py-1 px-2 mb-1 rounded transition-colors duration-200 cursor-pointer"
-                                @mouseenter="hoveredStandardIdx = sIdx" @mouseleave="hoveredStandardIdx = null" :class="{
-                                    'bg-rose-500/20 text-white font-bold border-l-2 border-rose-400':
-                                        hoveredCustomIdx === group.customIdx || hoveredStandardIdx === sIdx,
-                                    'text-slate-400': hoveredCustomIdx !== group.customIdx && hoveredStandardIdx !== sIdx
-                                }">
-                                <span class="mr-2 text-gray-600 select-none">{{ (sIdx + 1).toString().padStart(2, '0')
-                                }}</span>
-                                {{ standardInstructions[sIdx] }}
+                <h3
+                    class="text-[13px] font-bold text-gray-400 mb-2 uppercase tracking-wider flex items-center justify-between">
+                    Standard RISC-V Stream
+                    <span class="text-[10px] text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded">{{
+                        standardInstructions.length }} OPS</span>
+                </h3>
+                <div
+                    class="flex-1 font-mono text-sm bg-slate-900/40 border border-white/5 p-0 rounded relative custom-scrollbar overflow-hidden">
+                    <div class="absolute inset-0 overflow-y-auto p-2">
+                        <div v-for="(inst, sIdx) in standardInstructions" :key="'std-' + sIdx"
+                            class="py-0.5 px-2 mb-px rounded transition-all duration-200 cursor-default flex items-center text-[13px]"
+                            :class="{
+                                'bg-rose-500/10 text-rose-200': hoveredCustomIdx !== null && customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
+                                'text-slate-500 hover:text-slate-300': hoveredCustomIdx === null || !customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
+                                'opacity-40': hoveredCustomIdx !== null && !customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx)
+                            }">
+                            <div class="w-6 text-[10px] text-gray-600 select-none mr-2 text-right">{{ (sIdx +
+                                1).toString().padStart(2, '0') }}</div>
+                            <div class="truncate">{{ inst }}</div>
+
+                            <!-- 连接线指示器 -->
+                            <div v-if="hoveredCustomIdx !== null && customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx)"
+                                class="ml-auto w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]">
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 右侧：自定义指令类型选择区和指令列表，高亮联动 -->
+            <!-- 右侧：自定义指令类型选择区和指令列表 -->
             <div class="flex flex-col pl-2">
-                <div class="flex gap-2 mb-2">
-                    <button v-for="type in customTypes" :key="type.key"
-                        @click="selectedType = type.key; selectedCustomIdx = null"
-                        :class="selectedType === type.key ? 'bg-teal-500/20 text-teal-400 font-bold' : 'bg-slate-800 text-gray-400'"
-                        class="px-4 py-1 rounded transition-colors text-sm">
-                        {{ type.label }}
-                    </button>
-                </div>
-                <div class="flex-1 font-mono text-sm bg-slate-900/70 p-2 rounded relative custom-scrollbar"
-                    style="max-height: 60vh; overflow-y: auto;">
-                    <div v-for="(item, idx) in customInstructions" :key="'cust-' + idx"
-                        class="py-1 px-2 mb-2 rounded cursor-pointer transition-colors duration-200"
-                        @mouseenter="hoveredCustomIdx = idx" @mouseleave="hoveredCustomIdx = null"
-                        @click="selectedCustomIdx = idx" :class="{
-                            'bg-teal-500/10 text-white font-bold border-l-2 border-teal-400': idx === selectedCustomIdx || hoveredCustomIdx === idx || (hoveredStandardIdx !== null && item.mappedStandardIdxs.includes(hoveredStandardIdx)),
-                            'text-slate-400': idx !== selectedCustomIdx && hoveredCustomIdx !== idx && !(hoveredStandardIdx !== null && item.mappedStandardIdxs.includes(hoveredStandardIdx))
-                        }">
-                        <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
-                        {{ item.text }}
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex gap-2">
+                        <button v-for="type in customTypes" :key="type.key"
+                            @click="selectedType = type.key; selectedCustomIdx = null"
+                            :class="selectedType === type.key ? 'bg-teal-500/20 text-teal-400 font-bold border-teal-500/40' : 'bg-slate-800 text-gray-500 border-transparent hover:text-gray-300'"
+                            class="px-2 py-1 rounded border transition-all text-[11px] uppercase tracking-wider">
+                            {{ type.label }}
+                        </button>
                     </div>
-                    <div v-if="selectedCustomIdx !== null"
-                        class="mt-4 p-3 bg-slate-800/60 rounded border border-teal-500/20">
-                        <div class="text-teal-400 font-bold mb-2">详细内容：</div>
-                        <div class="text-slate-200 whitespace-pre-line">{{ customDetail }}</div>
+                    <div class="text-[10px] font-mono text-teal-500/50">CUSTOM EXTENSION</div>
+                </div>
+
+                <div
+                    class="flex-1 font-mono text-sm bg-slate-900/40 border border-white/5 p-0 rounded relative custom-scrollbar overflow-hidden flex flex-col">
+                    <div class="flex-1 overflow-y-auto p-2">
+                        <div v-for="(item, idx) in customInstructions" :key="'cust-' + idx"
+                            class="relative p-3 mb-2 rounded border transition-all duration-200 group cursor-pointer"
+                            @mouseenter="handleCustomHover(idx)" @mouseleave="handleCustomHover(null)"
+                            @click="selectedCustomIdx = idx" :class="{
+                                'bg-teal-500/10 border-teal-500/40 shadow-[0_0_15px_rgba(20,184,166,0.15)]': idx === selectedCustomIdx || hoveredCustomIdx === idx,
+                                'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600': idx !== selectedCustomIdx && hoveredCustomIdx !== idx,
+                                'opacity-50 blur-[1px] grayscale': hoveredCustomIdx !== null && hoveredCustomIdx !== idx
+                            }">
+                            <!-- Badge showing compression ratio -->
+                            <div class="absolute -top-1.5 -right-1.5 z-10" v-if="!item.text.startsWith('#')">
+                                <span
+                                    class="bg-slate-900 text-[9px] text-teal-400 px-1.5 py-0.5 rounded border border-teal-500/30 font-bold shadow-sm">
+                                    {{ item.mappedStandardIdxs.length }} OPS
+                                </span>
+                            </div>
+
+                            <div class="flex items-start gap-3">
+                                <div class="text-[10px] select-none pt-0.5 transition-colors"
+                                    :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'text-teal-400' : 'text-gray-600'">
+                                    {{ (idx + 1).toString().padStart(2, '0') }}
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-bold text-sm truncate transition-colors"
+                                        :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'text-teal-300' : 'text-slate-300'">
+                                        {{ item.text }}
+                                    </div>
+
+                                    <!-- 展开后的详情区域 -->
+                                    <transition name="fade">
+                                        <div v-if="idx === selectedCustomIdx || hoveredCustomIdx === idx"
+                                            class="mt-2 text-xs text-slate-400 border-t border-teal-500/20 pt-2 leading-relaxed">
+                                            <div
+                                                class="flex items-center gap-1 mb-1 text-[10px] text-teal-500/70 uppercase font-bold tracking-wider">
+                                                FUNCTION
+                                            </div>
+                                            {{ item.detail }}
+                                        </div>
+                                    </transition>
+                                </div>
+                            </div>
+
+                            <!-- Connecting line indicator (Left side) -->
+                            <div class="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[5px]"
+                                v-if="idx === selectedCustomIdx || hoveredCustomIdx === idx">
+                                <div class="w-2 h-8 bg-teal-500 rounded-r shadow-[0_0_10px_teal]"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
