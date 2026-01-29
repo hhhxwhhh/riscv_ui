@@ -788,18 +788,7 @@ onMounted(() => {
                             font: '9px monospace'
                         }
                     },
-                    {
-                        type: 'group',
-                        left: 20,
-                        bottom: 30,
-                        children: [
-                            {
-                                type: 'rect',
-                                shape: { width: 360, height: 90, r: 6 },
-                                style: { fill: 'rgba(31, 41, 55, 0.95)', stroke: currentCtx.color, lineWidth: 2.5 }
-                            }
-                        ]
-                    }
+                    // 已移除左下角中国状态框
                 ],
                 tooltip: {
                     trigger: 'item' as const,
