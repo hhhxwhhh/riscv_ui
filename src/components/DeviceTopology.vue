@@ -371,11 +371,10 @@ onMounted(() => {
             nodes.value.forEach(node => {
                 if (node.category === 'gateway') return;
 
-                // Lifecycle filter: In global view, only show flows for active/blinking devices
                 const isActive = node.isBlinking || node.throughput > 0;
                 const isSelected = selectedNames.includes(node.name);
 
-                if (isGlobal && !isActive) return;
+                // 全局视图下不再限制，只在非全局视图下过滤未选中节点
                 if (!isGlobal && !isSelected) return;
 
                 let stagesToShow: string[] = [];
