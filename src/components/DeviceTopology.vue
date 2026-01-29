@@ -776,7 +776,7 @@ onMounted(() => {
                         children: [
                             {
                                 type: 'rect',
-                                shape: { width: 220, height: 180, r: 4 }, // Adjusted height to accommodate new content
+                                shape: { width: 220, height: 200, r: 4 }, // 增加高度以容纳新内容
                                 style: { fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(125, 211, 252, 0.4)', lineWidth: 2 }
                             },
                             {
@@ -805,8 +805,9 @@ onMounted(() => {
                                         `IO: ${nodes.value.filter(n => n.isBlinking).length} Act / ${nodes.value.length} Node`,
                                         `Throughput: ${Math.round(gatewayThroughput.value)} Mbps`,
                                         `Processing Rate: ${(gatewayThroughput.value / 8).toFixed(1)} MB/s`,
+                                        `GATEWAY SPEEDUP: ${(gatewayThroughput.value / 300).toFixed(1)}x`,
                                         `STATUS: LIVE-STREAMING`,
-                                        `RISC-V: HARDWARE-ACCEL`
+                                        `RISC-V: HARDWARE-ACCEL`,
                                     ].join('\n'),
                                     fill: '#94a3b8',
                                     font: '12px monospace',
@@ -815,7 +816,6 @@ onMounted(() => {
                                 left: 15,
                                 top: 35
                             },
-
                         ]
                     }
                 ],
