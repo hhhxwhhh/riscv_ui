@@ -1,94 +1,73 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
-import { Play, Pause, RotateCcw, Cpu, FileCode } from 'lucide-vue-next';
+import { ref, computed } from 'vue';
+import { Cpu, FileCode } from 'lucide-vue-next';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
-    deviceName: { type: String, default: 'All Devices' },
-    deviceIP: { type: String, default: 'Global Broadcast' },
     stage: { type: Object as () => StageInfo, required: true }
 });
 
-let switchTimer: number | null = null;
-
-// Watch for device or stage changes to simulate context switching
-watch([() => props.deviceName, () => props.stage], () => {
-    // Reset and restart to give visual feedback of switching context
-    resetSimulation();
-    if (switchTimer) window.clearTimeout(switchTimer);
-    switchTimer = window.setTimeout(() => startSimulation(), 100);
-});
-
-const standardInstructions = computed(() => props.stage.standardInstructions);
-const customInstructions = computed(() => props.stage.customInstructions);
-
-// State
-const isRunning = ref(false);
-const standardIdx = ref(0);
-const customIdx = ref(0);
-const timer = ref<number | null>(null);
 const showFullCode = ref(false);
 const activeCodeTab = ref<'c' | 'asm'>('asm');
 
-const cycleCount = ref(0);
-const savedCycles = ref(0);
+// 自定义指令类型映射（加密、解密、哈希、认证）
+const customTypes = [
+    { key: 'ENCRYPT', label: '加密指令' },
+    { key: 'DECRYPT', label: '解密指令' },
+    { key: 'HASH', label: '哈希指令' },
+    { key: 'AUTH', label: '认证指令' }
+];
 
-// Simulation Speed (ms per instruction)
-const speed = 500;
+// 当前选中的类型
+const selectedType = ref('ENCRYPT');
 
-// Mock Registers
-const registers = ref({
-    pc: '0x80000000',
-    a0: '0x00000000',
-    t1: '0x12340000',
-    process: computed(() => props.stage.statusText)
+// 获取当前类型对应的stage
+import { STAGES } from '../api/stages';
+const stageMap: { [key: string]: StageInfo } = STAGES.reduce(
+    (acc, s) => { acc[s.id] = s; return acc; },
+    {} as { [key: string]: StageInfo }
+);
+
+// 当前类型对应的自定义指令
+const customInstructions = computed(() => {
+    const stage = stageMap[selectedType.value] || props.stage;
+    if (stage && stage.customInstructions) return stage.customInstructions;
+    return [];
 });
 
-const updateRegisters = () => {
-    registers.value.pc = '0x' + (0x80000000 + standardIdx.value * 4).toString(16).padEnd(8, '0');
-    registers.value.a0 = '0x' + Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
-    registers.value.t1 = '0x' + Math.floor(Math.random() * 0xffff).toString(16).padStart(8, '0');
-
-    cycleCount.value += Math.floor(Math.random() * 5) + 1;
-    // Calculate relative speedup based on stage metrics
-    const speedup = (props.stage.metrics.stdLatency / props.stage.metrics.latency) || 1;
-    savedCycles.value += Math.floor(speedup * 10);
-};
-
-const startSimulation = () => {
-    if (isRunning.value) return;
-    isRunning.value = true;
-
-    timer.value = setInterval(() => {
-        // Advance Standard
-        standardIdx.value = (standardIdx.value + 1) % standardInstructions.value.length;
-        customIdx.value = (customIdx.value + 1) % customInstructions.value.length;
-        updateRegisters();
-    }, speed);
-};
-
-const stopSimulation = () => {
-    if (timer.value) clearInterval(timer.value);
-    isRunning.value = false;
-    timer.value = null;
-};
-
-const resetSimulation = () => {
-    stopSimulation();
-    standardIdx.value = 0;
-    customIdx.value = 0;
-    cycleCount.value = 0;
-    savedCycles.value = 0;
-};
-
-onMounted(() => {
-    startSimulation();
+// 当前类型对应的标准指令
+const standardInstructions = computed(() => {
+    const stage = stageMap[selectedType.value] || props.stage;
+    if (stage && stage.standardInstructions) return stage.standardInstructions;
+    return [];
 });
 
-onUnmounted(() => {
-    stopSimulation();
-    if (switchTimer) window.clearTimeout(switchTimer);
+// 当前选中的自定义指令索引
+const selectedCustomIdx = ref<number | null>(null);
+
+// 获取当前自定义指令详细内容
+const customDetail = computed(() => {
+    if (selectedCustomIdx.value === null) return '';
+    const item = customInstructions.value[selectedCustomIdx.value];
+    return item?.detail || '';
 });
+
+// 多选自定义指令支持高亮联动
+const hoveredCustomIdx = ref<number | null>(null);
+const hoveredStandardIdx = ref<number | null>(null);
+
+// 计算分组展示数据
+const groupedStandardInstructions = computed(() => {
+    return customInstructions.value.map((item, idx) => ({
+        customIdx: idx,
+        customText: item.text,
+        mappedStandardIdxs: item.mappedStandardIdxs,
+    }));
+});
+
+// 获取当前类型的性能指标
+
+
 </script>
 
 <template>
@@ -97,31 +76,14 @@ onUnmounted(() => {
             <div class="flex flex-col">
                 <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
                     <Cpu class="w-5 h-5 text-sky-400" />
-                    Instruction Execution Flow
+                    指令流与内容展示
                 </h2>
-                <div class="text-xs text-gray-400 mt-1">
-                    Monitoring: <span class="text-sky-300 font-bold">{{ deviceName }}</span>
-                    <span class="mx-1">|</span>
-                    Target IP: <span class="text-slate-300 font-mono">{{ deviceIP }}</span>
-                    <span class="mx-1">|</span>
-                    Source: <span class="text-rose-300">Gateway</span>
-                </div>
             </div>
             <div class="flex items-center gap-2">
                 <button @click="showFullCode = true"
                     class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
                     <FileCode class="w-4 h-4" />
                     查看完整代码
-                </button>
-                <div class="px-3 py-1 rounded-full text-xs bg-slate-800/60 border border-slate-700/60 text-slate-300">
-                    Speed: {{ speed }}ms
-                </div>
-                <button @click="isRunning ? stopSimulation() : startSimulation()"
-                    class="p-2 rounded hover:bg-gray-700 text-gray-300 transition-colors">
-                    <component :is="isRunning ? Pause : Play" class="w-5 h-5" />
-                </button>
-                <button @click="resetSimulation" class="p-2 rounded hover:bg-gray-700 text-gray-300 transition-colors">
-                    <RotateCcw class="w-5 h-5" />
                 </button>
             </div>
         </div>
@@ -147,30 +109,22 @@ onUnmounted(() => {
                             <div class="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
                                 <button @click="activeCodeTab = 'c'"
                                     :class="activeCodeTab === 'c' ? 'bg-rose-500/20 text-rose-400' : 'text-gray-400 hover:text-gray-200'"
-                                    class="px-4 py-1 rounded-md text-sm font-medium transition-all">
-                                    Standard C
-                                </button>
+                                    class="px-4 py-1 rounded-md text-sm font-medium transition-all">Standard C</button>
                                 <button @click="activeCodeTab = 'asm'"
                                     :class="activeCodeTab === 'asm' ? 'bg-teal-500/20 text-teal-400' : 'text-gray-400 hover:text-gray-200'"
-                                    class="px-4 py-1 rounded-md text-sm font-medium transition-all">
-                                    RISC-V ASM
-                                </button>
+                                    class="px-4 py-1 rounded-md text-sm font-medium transition-all">RISC-V ASM</button>
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
-                            <div class="text-[10px] text-gray-500 font-mono italic">
-                                READ_ONLY_BUFFER: 0x{{ (Math.random() * 0xFFFFFF).toString(16) }}
-                            </div>
+                            <div class="text-[10px] text-gray-500 font-mono italic">READ_ONLY_BUFFER: 0x{{
+                                (Math.random() * 0xFFFFFF).toString(16) }}</div>
                             <button @click="showFullCode = false"
-                                class="text-gray-400 hover:text-white px-4 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md transition-colors text-sm">
-                                Close Terminal
-                            </button>
+                                class="text-gray-400 hover:text-white px-4 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md transition-colors text-sm">Close
+                                Terminal</button>
                         </div>
                     </div>
-
                     <div
                         class="flex-1 overflow-hidden flex flex-col bg-black/40 rounded-lg border border-slate-800 relative">
-                        <!-- Code Header Info -->
                         <div
                             class="flex items-center justify-between px-4 py-2 border-b border-slate-800 bg-slate-900/50">
                             <div class="flex gap-2">
@@ -182,72 +136,89 @@ onUnmounted(() => {
                                 {{ activeCodeTab === 'c' ? 'legacy_implementation.c' : 'accelerated_kernel.s' }}
                             </div>
                         </div>
-
                         <div class="flex-1 overflow-y-auto p-4 font-mono text-sm leading-relaxed custom-scrollbar">
                             <div class="flex gap-4">
-                                <!-- Line Numbers -->
                                 <div
                                     class="flex flex-col text-slate-700 text-right select-none opacity-50 border-r border-slate-800 pr-4 min-w-[3rem]">
                                     <div v-for="n in (activeCodeTab === 'c' ? props.stage.fullCode.c.split('\n').length : props.stage.fullCode.asm.split('\n').length)"
-                                        :key="n">
-                                        {{ n }}
-                                    </div>
+                                        :key="n">{{ n }}</div>
                                 </div>
-                                <!-- Code Content -->
                                 <pre v-if="activeCodeTab === 'c'"
                                     class="text-slate-300 w-full whitespace-pre-wrap selection:bg-rose-500/30">{{ props.stage.fullCode.c }}</pre>
                                 <pre v-else
                                     class="text-slate-300 w-full whitespace-pre-wrap selection:bg-teal-500/30">{{ props.stage.fullCode.asm }}</pre>
                             </div>
                         </div>
-
-                        <!-- Performance Overlay Badge -->
                         <div v-if="activeCodeTab === 'asm'"
                             class="absolute bottom-6 right-6 px-4 py-2 bg-teal-500/10 border border-teal-500/30 rounded backdrop-blur-sm shadow-xl">
                             <div class="text-[10px] text-teal-500 mb-1">ACCELERATION STATUS</div>
                             <div class="text-xl font-bold text-teal-400 flex items-baseline gap-1">
-                                {{ (props.stage.metrics.stdLatency / props.stage.metrics.latency).toFixed(1) }}
-                                <span class="text-xs">x FASTER</span>
+                                {{ (props.stage.metrics.stdLatency / props.stage.metrics.latency).toFixed(1) }}<span
+                                    class="text-xs">x FASTER</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </transition>
 
-            <!-- Standard Column -->
+            <!-- 左侧：分组展示自定义指令及其标准指令列表，高亮联动 -->
             <div class="flex flex-col border-r border-gray-700/80 pr-2">
-                <h3 class="text-lg font-semibold text-rose-300 mb-2">Standard Instructions</h3>
-                <div class="flex-1 overflow-y-auto font-mono text-sm bg-slate-900/70 p-2 rounded relative">
-                    <div v-for="(line, idx) in standardInstructions" :key="'std-' + idx"
-                        class="py-1 px-2 transition-colors duration-200"
-                        :class="{ 'bg-rose-500/10 text-white font-bold border-l-2 border-rose-400': idx === standardIdx, 'text-slate-400': idx !== standardIdx }">
-                        <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
-                        {{ line }}
+                <h3 class="text-lg font-semibold text-rose-300 mb-2">标准指令分组展示</h3>
+                <div class="flex-1 font-mono text-sm bg-slate-900/70 p-2 rounded relative custom-scrollbar"
+                    style="max-height: 60vh; overflow-y: auto;">
+                    <div v-for="group in groupedStandardInstructions" :key="'group-' + group.customIdx" class="mb-4">
+                        <div class="font-bold text-teal-400 mb-1 flex items-center">
+                            <span @mouseenter="hoveredCustomIdx = group.customIdx" @mouseleave="hoveredCustomIdx = null"
+                                :class="{ 'underline': hoveredCustomIdx === group.customIdx }">{{ group.customText
+                                }}</span>
+                        </div>
+                        <div class="pl-4">
+                            <div v-for="sIdx in group.mappedStandardIdxs" :key="'std-' + sIdx"
+                                class="py-1 px-2 mb-1 rounded transition-colors duration-200 cursor-pointer"
+                                @mouseenter="hoveredStandardIdx = sIdx" @mouseleave="hoveredStandardIdx = null" :class="{
+                                    'bg-rose-500/20 text-white font-bold border-l-2 border-rose-400':
+                                        hoveredCustomIdx === group.customIdx || hoveredStandardIdx === sIdx,
+                                    'text-slate-400': hoveredCustomIdx !== group.customIdx && hoveredStandardIdx !== sIdx
+                                }">
+                                <span class="mr-2 text-gray-600 select-none">{{ (sIdx + 1).toString().padStart(2, '0')
+                                }}</span>
+                                {{ standardInstructions[sIdx] }}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Custom Column -->
+            <!-- 右侧：自定义指令类型选择区和指令列表，高亮联动 -->
             <div class="flex flex-col pl-2">
-                <div class="flex justify-between items-end mb-2">
-                    <h3 class="text-lg font-semibold text-teal-300">RISC-V Crypto Extension</h3>
-                    <div class="text-[10px] text-teal-400 font-mono flex items-center gap-1 mb-1">
-                        <span class="animate-pulse">●</span>
-                        SPEEDUP: {{ (props.stage.metrics.stdLatency / props.stage.metrics.latency).toFixed(1) }}x
-                    </div>
+                <div class="flex gap-2 mb-2">
+                    <button v-for="type in customTypes" :key="type.key"
+                        @click="selectedType = type.key; selectedCustomIdx = null"
+                        :class="selectedType === type.key ? 'bg-teal-500/20 text-teal-400 font-bold' : 'bg-slate-800 text-gray-400'"
+                        class="px-4 py-1 rounded transition-colors text-sm">
+                        {{ type.label }}
+                    </button>
                 </div>
-                <div class="flex-1 overflow-y-auto font-mono text-sm bg-slate-900/70 p-2 rounded relative">
-                    <div v-for="(line, idx) in customInstructions" :key="'cust-' + idx"
-                        class="py-1 px-2 transition-colors duration-200"
-                        :class="{ 'bg-teal-500/10 text-white font-bold border-l-2 border-teal-400': idx === customIdx, 'text-slate-400': idx !== customIdx }">
+                <div class="flex-1 font-mono text-sm bg-slate-900/70 p-2 rounded relative custom-scrollbar"
+                    style="max-height: 60vh; overflow-y: auto;">
+                    <div v-for="(item, idx) in customInstructions" :key="'cust-' + idx"
+                        class="py-1 px-2 mb-2 rounded cursor-pointer transition-colors duration-200"
+                        @mouseenter="hoveredCustomIdx = idx" @mouseleave="hoveredCustomIdx = null"
+                        @click="selectedCustomIdx = idx" :class="{
+                            'bg-teal-500/10 text-white font-bold border-l-2 border-teal-400': idx === selectedCustomIdx || hoveredCustomIdx === idx || (hoveredStandardIdx !== null && item.mappedStandardIdxs.includes(hoveredStandardIdx)),
+                            'text-slate-400': idx !== selectedCustomIdx && hoveredCustomIdx !== idx && !(hoveredStandardIdx !== null && item.mappedStandardIdxs.includes(hoveredStandardIdx))
+                        }">
                         <span class="mr-2 text-gray-600 select-none">{{ (idx + 1).toString().padStart(2, '0') }}</span>
-                        {{ line }}
+                        {{ item.text }}
+                    </div>
+                    <div v-if="selectedCustomIdx !== null"
+                        class="mt-4 p-3 bg-slate-800/60 rounded border border-teal-500/20">
+                        <div class="text-teal-400 font-bold mb-2">详细内容：</div>
+                        <div class="text-slate-200 whitespace-pre-line">{{ customDetail }}</div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- 已移除底部寄存器信息面板 -->
     </div>
 </template>
 

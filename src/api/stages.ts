@@ -4,7 +4,11 @@ export interface StageInfo {
     description: string;
     statusText: string;
     standardInstructions: string[];
-    customInstructions: string[];
+    customInstructions: {
+        text: string;
+        mappedStandardIdxs: number[];
+        detail: string;
+    }[];
     metrics: {
         throughput: number;
         latency: number;
@@ -47,12 +51,36 @@ export const STAGES: StageInfo[] = [
             'BEQ     a0, zero, fail   # Check Result'
         ],
         customInstructions: [
-            'LKEY    k0, 0(secure)    # HW Root Key',
-            'RISCV.SM2.SIGN a1, k0   # HW SM2 Sign',
-            'RISCV.SM2.VER  a2, a1   # HW SM2 Verify',
-            'CVAL.ID  a0, a2         # Validate ID',
-            '# Fast Path Complete',
-            '# One Cycle Auth'
+            {
+                text: 'LKEY    k0, 0(secure)    # HW Root Key',
+                mappedStandardIdxs: [0, 1],
+                detail: '硬件加载根密钥，代替软件密钥加载和设备ID获取。'
+            },
+            {
+                text: 'RISCV.SM2.SIGN a1, k0   # HW SM2 Sign',
+                mappedStandardIdxs: [2, 3, 4],
+                detail: '硬件SM2签名，代替挑战种子、哈希混合和移位掩码。'
+            },
+            {
+                text: 'RISCV.SM2.VER  a2, a1   # HW SM2 Verify',
+                mappedStandardIdxs: [5, 6, 7, 8],
+                detail: '硬件SM2验签，代替软件验签和公钥加载。'
+            },
+            {
+                text: 'CVAL.ID  a0, a2         # Validate ID',
+                mappedStandardIdxs: [9, 10],
+                detail: '硬件ID校验，代替软件ECC乘法和结果检查。'
+            },
+            {
+                text: '# Fast Path Complete',
+                mappedStandardIdxs: [],
+                detail: '快速路径完成，无需多步软件循环。'
+            },
+            {
+                text: '# One Cycle Auth',
+                mappedStandardIdxs: [],
+                detail: '单周期认证，极大提升效率。'
+            }
         ],
         metrics: {
             throughput: 850,
@@ -100,12 +128,36 @@ export const STAGES: StageInfo[] = [
             'SD      a0, 0(out)       # Store Encrypted'
         ],
         customInstructions: [
-            'LD      a0, 0(packet)    # Load 64-bit Chunk',
-            'LKEY    k1, 0(key_reg)   # Load SM4 Key',
-            'RISCV.SM4.ENC a0, a0, k1 # HW SM4 Step',
-            'SD      a0, 0(out)       # Store to DMA',
-            '# Parallel Cipher Active',
-            '# Multi-Core Pipeline'
+            {
+                text: 'LD      a0, 0(packet)    # Load 64-bit Chunk',
+                mappedStandardIdxs: [0],
+                detail: '一次性加载数据块，简化分步加载。'
+            },
+            {
+                text: 'LKEY    k1, 0(key_reg)   # Load SM4 Key',
+                mappedStandardIdxs: [1],
+                detail: '硬件密钥加载，代替软件密钥处理。'
+            },
+            {
+                text: 'RISCV.SM4.ENC a0, a0, k1 # HW SM4 Step',
+                mappedStandardIdxs: [2, 3, 4, 5],
+                detail: '硬件加密一步到位，代替多轮软件加密。'
+            },
+            {
+                text: 'SD      a0, 0(out)       # Store to DMA',
+                mappedStandardIdxs: [8],
+                detail: '直接存储加密结果，简化存储流程。'
+            },
+            {
+                text: '# Parallel Cipher Active',
+                mappedStandardIdxs: [6, 7],
+                detail: '并行加密，提升性能。'
+            },
+            {
+                text: '# Multi-Core Pipeline',
+                mappedStandardIdxs: [],
+                detail: '多核流水线加速。'
+            }
         ],
         metrics: {
             throughput: 980,
@@ -151,12 +203,36 @@ export const STAGES: StageInfo[] = [
             'SD      a0, 0(plain)     # Store Plaintext'
         ],
         customInstructions: [
-            'LD      a0, 0(cipher)    # Load Cipher Block',
-            'LKEY    k1, 0(key_reg)   # Load SM4 Key',
-            'RISCV.SM4.DEC a0, a0, k1 # HW SM4 Decrypt',
-            'SD      a0, 0(plain)     # Store to Memory',
-            '# Inverse Cipher Fast',
-            '# Low Latency Dec'
+            {
+                text: 'LD      a0, 0(cipher)    # Load Cipher Block',
+                mappedStandardIdxs: [0],
+                detail: '一次性加载密文块，简化分步加载。'
+            },
+            {
+                text: 'LKEY    k1, 0(key_reg)   # Load SM4 Key',
+                mappedStandardIdxs: [1],
+                detail: '硬件密钥加载，代替软件密钥处理。'
+            },
+            {
+                text: 'RISCV.SM4.DEC a0, a0, k1 # HW SM4 Decrypt',
+                mappedStandardIdxs: [2, 3, 4, 5],
+                detail: '硬件解密一步到位，代替多轮软件解密。'
+            },
+            {
+                text: 'SD      a0, 0(plain)     # Store to Memory',
+                mappedStandardIdxs: [8],
+                detail: '直接存储解密结果，简化存储流程。'
+            },
+            {
+                text: '# Inverse Cipher Fast',
+                mappedStandardIdxs: [6, 7],
+                detail: '逆向加密快速完成。'
+            },
+            {
+                text: '# Low Latency Dec',
+                mappedStandardIdxs: [],
+                detail: '低延迟解密。'
+            }
         ],
         metrics: {
             throughput: 960,
@@ -199,12 +275,36 @@ export const STAGES: StageInfo[] = [
             'BNE     a1, end, loop    # Loop Hash'
         ],
         customInstructions: [
-            'LD      a1, 0(data)      # Load Data Ptr',
-            'RISCV.SM3.INIT          # Init SM3 Engine',
-            'RISCV.SM3.UPDATE a1, 64 # HW Batch Hash',
-            'RISCV.SM3.FINISH a0     # Get Digest',
-            '# Atomic Integrity',
-            '# Integrity Verified'
+            {
+                text: 'LD      a1, 0(data)      # Load Data Ptr',
+                mappedStandardIdxs: [0],
+                detail: '一次性加载数据指针，简化分步加载。'
+            },
+            {
+                text: 'RISCV.SM3.INIT          # Init SM3 Engine',
+                mappedStandardIdxs: [1],
+                detail: '硬件初始化哈希引擎，代替软件累加。'
+            },
+            {
+                text: 'RISCV.SM3.UPDATE a1, 64 # HW Batch Hash',
+                mappedStandardIdxs: [2, 3, 4, 5],
+                detail: '硬件批量哈希，代替多步软件循环。'
+            },
+            {
+                text: 'RISCV.SM3.FINISH a0     # Get Digest',
+                mappedStandardIdxs: [6, 7],
+                detail: '硬件获取哈希结果，代替软件收尾。'
+            },
+            {
+                text: '# Atomic Integrity',
+                mappedStandardIdxs: [],
+                detail: '原子性完整性校验。'
+            },
+            {
+                text: '# Integrity Verified',
+                mappedStandardIdxs: [],
+                detail: '完整性已验证。'
+            }
         ],
         metrics: {
             throughput: 1200,
