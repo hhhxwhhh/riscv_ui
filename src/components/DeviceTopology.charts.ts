@@ -214,59 +214,56 @@ export const buildChartOption = (
 
             const ctx = getStageContext(sid);
             
-            if (isLargeMode) {
-                // WebGL Accelerated Lines
-                series.push({
-                    type: 'linesGL',
-                    name: `Flow-${sid}`,
-                    coordinateSystem: 'cartesian2d',
-                    blendMode: 'lighter',
-                    lineStyle: {
-                        color: ctx.color,
-                        width: 1,
-                        opacity: 0.15 // High transparency for dense lines
-                    },
-                    data: currentLines,
-                    z: 1
-                });
-            } else {
-                // Standard Canvas Lines with Effects
-                let avgTput = 0;
-                // ... same logic as before ...
-                if (isGlobal) {
-                    const stageNodes = nodes.filter(n => n.stageId === sid || viewMode !== 'all');
-                    if (stageNodes.length > 0) {
-                        avgTput = stageNodes.reduce((acc, n) => acc + n.throughput, 0) / stageNodes.length;
-                    }
-                } else {
-                     const activeInStage = nodes.find(n => selectedNames.includes(n.name) && n.stageId === sid && n.isBlinking);
-                     avgTput = activeInStage ? activeInStage.throughput : 50;
+            // HYBRID RENDERING STRATEGY:
+            // For large datasets, we use GL for filtering heavily, but standard Canvas 'lines'
+            // specifically for the animation loops because 'linesGL' does not support trail effects.
+            // To maintain performance, we limit the number of ANIMATED lines in massive mode.
+            
+            const MAX_ANIMATED_LINES = isLargeMode ? 200 : Infinity;
+            
+            // Sort by throughput to prioritize showing significant traffic
+            // If in strict single-stage view, show more, otherwise be conservative
+            const displayData = isLargeMode 
+                ? currentLines.sort((a, b) => b.throughput - a.throughput).slice(0, MAX_ANIMATED_LINES)
+                : currentLines;
+
+            if (displayData.length === 0) return;
+
+            // Calculate avg throughput for effect speed
+            let avgTput = 0;
+            if (isGlobal) {
+                const stageNodes = nodes.filter(n => n.stageId === sid || viewMode !== 'all');
+                if (stageNodes.length > 0) {
+                    avgTput = stageNodes.reduce((acc, n) => acc + n.throughput, 0) / stageNodes.length;
                 }
-                const effectPeriod = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
-    
-                series.push({
-                    type: 'lines',
-                    name: `Flow-${sid}`,
-                    silent: false,
-                    coordinateSystem: 'cartesian2d',
-                    effect: {
-                        show: true,
-                        period: effectPeriod,
-                        trailLength: 0.1,
-                        symbol: 'arrow',
-                        symbolSize: isGlobal ? 3 : 5,
-                        color: ctx.color
-                    },
-                    lineStyle: {
-                        color: ctx.color,
-                        width: 1.5,
-                        curveness: 0.2,
-                        opacity: isGlobal ? 0.3 : 0.7
-                    },
-                    data: currentLines,
-                    z: 1
-                });
+            } else {
+                    const activeInStage = nodes.find(n => selectedNames.includes(n.name) && n.stageId === sid && n.isBlinking);
+                    avgTput = activeInStage ? activeInStage.throughput : 50;
             }
+            const effectPeriod = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
+
+            series.push({
+                type: 'lines', // Always use Standard Lines for Animation support
+                name: `Flow-${sid}`,
+                silent: false,
+                coordinateSystem: 'cartesian2d',
+                effect: {
+                    show: true, // Force animation on
+                    period: effectPeriod,
+                    trailLength: 0.1,
+                    symbol: 'arrow',
+                    symbolSize: isGlobal ? 3 : 5,
+                    color: ctx.color
+                },
+                lineStyle: {
+                    color: ctx.color,
+                    width: 1.5,
+                    curveness: 0.2,
+                    opacity: isGlobal ? 0.3 : 0.7
+                },
+                data: displayData,
+                z: 1
+            });
         });
         return series;
     };

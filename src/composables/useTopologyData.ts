@@ -62,9 +62,24 @@ export function useTopologyData(
             };
         });
 
+        // SIMULATION FOR LARGE DATASET
+        // Uncomment/Use this block to test WebGL performance with > 500 nodes
+        const isSimulationMode = true; // Set to true to force 2000 nodes for testing
+        let simulationDevices: any[] = [];
+        if (isSimulationMode) {
+             simulationDevices = Array.from({ length: 2000 }, (_, i) => ({
+                name: `SimNode-${i}`,
+                ip: `10.0.${Math.floor(i / 255)}.${i % 255}`,
+                type: 'device'
+            }));
+        }
+
         const gatewayName = 'A100 Gateway';
         const seenNames = new Set([gatewayName]);
-        const deviceList = ((devices && devices.length) ? devices : defaultDevices)
+        
+        const sourceList = isSimulationMode ? simulationDevices : ((devices && devices.length) ? devices : defaultDevices);
+        
+        const deviceList = sourceList
             .filter(device => {
                 if (!device.name || seenNames.has(device.name)) return false;
                 seenNames.add(device.name);
