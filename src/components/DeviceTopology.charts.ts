@@ -32,8 +32,8 @@ export const buildChartOption = (
     const nodeB = selectedNames[1] || '';
 
     // Only calculate complex lines if not in large mode or if really needed
-    // In large mode, we might skip flow lines or only show for selected nodes
-    const shouldCalculateFlows = !isLargeMode || !isGlobal;
+    // In large mode, we will use WebGL for flows if enabled
+    const shouldCalculateFlows = !isGlobal || !isLargeMode || true; // Enable flows for large mode via WebGL
 
     if (shouldCalculateFlows) {
         nodes.forEach(node => {
@@ -213,48 +213,100 @@ export const buildChartOption = (
             if (!currentLines || currentLines.length === 0) return;
 
             const ctx = getStageContext(sid);
-            // Calculate avg throughput for effect speed
-            let avgTput = 0;
-            if (isGlobal) {
-                const stageNodes = nodes.filter(n => n.stageId === sid || viewMode !== 'all');
-                if (stageNodes.length > 0) {
-                    avgTput = stageNodes.reduce((acc, n) => acc + n.throughput, 0) / stageNodes.length;
-                }
+            
+            if (isLargeMode) {
+                // WebGL Accelerated Lines
+                series.push({
+                    type: 'linesGL',
+                    name: `Flow-${sid}`,
+                    coordinateSystem: 'cartesian2d',
+                    blendMode: 'lighter',
+                    lineStyle: {
+                        color: ctx.color,
+                        width: 1,
+                        opacity: 0.15 // High transparency for dense lines
+                    },
+                    data: currentLines,
+                    z: 1
+                });
             } else {
-                 const activeInStage = nodes.find(n => selectedNames.includes(n.name) && n.stageId === sid && n.isBlinking);
-                 avgTput = activeInStage ? activeInStage.throughput : 50;
+                // Standard Canvas Lines with Effects
+                let avgTput = 0;
+                // ... same logic as before ...
+                if (isGlobal) {
+                    const stageNodes = nodes.filter(n => n.stageId === sid || viewMode !== 'all');
+                    if (stageNodes.length > 0) {
+                        avgTput = stageNodes.reduce((acc, n) => acc + n.throughput, 0) / stageNodes.length;
+                    }
+                } else {
+                     const activeInStage = nodes.find(n => selectedNames.includes(n.name) && n.stageId === sid && n.isBlinking);
+                     avgTput = activeInStage ? activeInStage.throughput : 50;
+                }
+                const effectPeriod = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
+    
+                series.push({
+                    type: 'lines',
+                    name: `Flow-${sid}`,
+                    silent: false,
+                    coordinateSystem: 'cartesian2d',
+                    effect: {
+                        show: true,
+                        period: effectPeriod,
+                        trailLength: 0.1,
+                        symbol: 'arrow',
+                        symbolSize: isGlobal ? 3 : 5,
+                        color: ctx.color
+                    },
+                    lineStyle: {
+                        color: ctx.color,
+                        width: 1.5,
+                        curveness: 0.2,
+                        opacity: isGlobal ? 0.3 : 0.7
+                    },
+                    data: currentLines,
+                    z: 1
+                });
             }
-            const effectPeriod = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
-
-            series.push({
-                type: 'lines',
-                name: `Flow-${sid}`,
-                silent: false,
-                coordinateSystem: 'cartesian2d',
-                effect: {
-                    show: !isLargeMode, // Disable expensive effect in large mode
-                    period: effectPeriod,
-                    trailLength: 0.1,
-                    symbol: 'arrow',
-                    symbolSize: isGlobal ? 3 : 5,
-                    color: ctx.color
-                },
-                lineStyle: {
-                    color: ctx.color,
-                    width: 1.5,
-                    curveness: 0.2,
-                    opacity: isGlobal ? 0.3 : 0.7
-                },
-                data: currentLines,
-                z: 1
-            });
         });
         return series;
     };
 
     const buildNodeLayer = (): any[] => {
+        if (isLargeMode) {
+             return [{
+                type: 'scatterGL',
+                name: 'GLNodes',
+                coordinateSystem: 'cartesian2d',
+                symbolSize: 6,
+                itemStyle: {
+                    color: '#7dd3fc',
+                    opacity: 0.8
+                },
+                data: nodes.map(node => {
+                    const isGateway = node.name.includes('Gateway');
+                    const isSelected = selectedNames.includes(node.name);
+                    const isActive = node.isBlinking || node.throughput > 0;
+                    
+                    const sid = (viewMode === 'all' || isActive) 
+                        ? (node.stageId || 'AUTH') 
+                        : stageId;
+                    
+                    const ctx = getStageContext(sid);
+                    let color = isGateway ? getGatewayColor(displayGatewayThroughput) : (isSelected ? ctx.color : (isGlobal ? ctx.color : THEME.textMuted));
+                    if (node.isBlinking && !isGateway) color = THEME.warning;
+                    
+                    return {
+                        name: node.name,
+                        value: [node.x, node.y, 1], // z=1 for GL
+                        itemStyle: { color: color }
+                    };
+                }),
+                z: 2
+            }];
+        }
+
         return [{
-            type: isLargeMode ? 'scatter' : 'graph', // Switch to scatter for better perf if huge, but graph handles images better. Graph has 'large' mode.
+            type: 'graph',
             // Using graph with large: true is the standard ECharts way for many nodes
             large: isLargeMode,
             largeThreshold: 500,
@@ -347,6 +399,7 @@ export const buildChartOption = (
     };
 
     const buildInteractionLayer = (): any[] => {
+        if (isLargeMode) return [];
         return [{
             name: 'InteractionLayer',
             type: 'graph',
@@ -476,7 +529,7 @@ export const buildChartOption = (
                         `;
                 }
 
-                if (params.seriesName === 'InteractionLayer') {
+                if (params.seriesName === 'InteractionLayer' || params.seriesName === 'GLNodes') {
                     const node = nodes.find(n => n.name === params.name);
                     const sid = (selectedNames.includes(params.name) && viewMode !== 'all') ? stageId : (node?.stageId || 'AUTH');
                     const ctx = getStageContext(sid);

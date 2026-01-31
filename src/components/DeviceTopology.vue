@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted, watch, computed, toRef } from 'vue';
 import * as echarts from 'echarts';
+import 'echarts-gl'; // Import ECharts GL
 import { type StageInfo } from '../api/stages';
 import { type DeviceInfo, THEME } from './DeviceTopology.types';
 import gatewaySvgRaw from '../svgs/gateway.svg?raw';
@@ -75,9 +76,9 @@ onMounted(() => {
 
         scheduleRender();
 
-        // Robust Click Handler on the transparent Interaction Layer
+        // Robust Click Handler on the transparent Interaction Layer or GL Layer
         chartInstance.on('click', (params: any) => {
-            if (params.componentType === 'series' && params.seriesName === 'InteractionLayer') {
+            if (params.componentType === 'series' && (params.seriesName === 'InteractionLayer' || params.seriesName === 'GLNodes')) {
                 selectNode(params.name);
             }
         });
