@@ -85,6 +85,13 @@ wss.on("connection", function connection(ws) {
 
     const currentStageId = STAGE_IDS[transaction.stageIndex];
 
+    // 模拟网关压力：通过叠加正弦波产生平滑的“压力波”
+    // wave 控制约 40 秒的长周期压力起伏 (0.5 频率)
+    const wave = Math.sin(time * 0.5);
+    // 基础吞吐量在 15000 到 35000 之间波动
+    // 对应前端 /10 后的 1500~3500 Mbps/设备
+    const baseThroughput = 25000 + wave * 10000 + Math.sin(time * 2) * 2000;
+
     // Create a packet
     const packet = {
       source: deviceIp,
@@ -93,9 +100,9 @@ wss.on("connection", function connection(ws) {
       stageId: currentStageId,
       isLastStage: transaction.stageIndex === STAGE_IDS.length - 1,
       metrics: {
-        throughput: 400 + Math.random() * 800,
-        latency: 0.1 + Math.random() * 2,
-        securityScore: 90 + Math.random() * 10,
+        throughput: baseThroughput,
+        latency: 0.8 + (wave + 1) * 0.5, // 压力大时延迟同步上升
+        securityScore: 98 - (wave + 1) * 1.5, // 模拟高负载下的微小安全抖动
       },
     };
 

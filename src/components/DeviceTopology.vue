@@ -29,22 +29,38 @@ const selectedNodeNames = ref<string[]>(
 
 const viewMode = ref<'stage' | 'device' | 'all'>('stage');
 let optionBuilder: ((selectedNames: string[]) => echarts.EChartsOption) | null = null;
+let isDisposed = false;
 
-// 计算网关实时吞吐量
-const gatewayThroughput = computed(() => {
+// 原始网关内部计算值
+const rawGatewayThroughput = computed(() => {
     return deviceNodes.value.reduce((sum, node) => sum + (node.throughput || 0), 0);
 });
 
+// 平滑显示值，用于颜色和视觉渐变
+const displayGatewayThroughput = ref(0);
+
+// 使用每一帧趋近目标值的方式实现“渐变”效果
+const animateGatewayThroughput = () => {
+    if (isDisposed) return;
+    const diff = rawGatewayThroughput.value - displayGatewayThroughput.value;
+    if (Math.abs(diff) > 0.5) {
+        displayGatewayThroughput.value += diff * 0.08; // 8% 的趋近率
+        scheduleRender();
+    }
+    requestAnimationFrame(animateGatewayThroughput);
+};
+
+// 启动平滑动画
+requestAnimationFrame(animateGatewayThroughput);
+
 // 根据吞吐量计算网关颜色（从浅红到深红）
 const getGatewayColor = (throughput: number) => {
-    // 定义最大吞吐量阈值，用于确定颜色深度
-    const maxExpectedThroughput = 5000; // 可根据实际情况调整
-    const intensity = Math.min(1, throughput / maxExpectedThroughput); // 确保强度不超过1
+    const maxExpectedThroughput = 5000;
+    const intensity = Math.min(1, throughput / maxExpectedThroughput);
 
-    // 计算从浅红到深红的变化
     const red = 255;
-    const green = Math.floor(255 * (1 - intensity * 0.7)); // 绿色随吞吐量增加而减少
-    const blue = Math.floor(255 * (1 - intensity * 0.7)); // 蓝色随吞吐量增加而减少
+    const green = Math.floor(255 * (1 - intensity * 0.85)); // 颜色变化更明显
+    const blue = Math.floor(255 * (1 - intensity * 0.85));
     return `rgb(${red}, ${green}, ${blue})`;
 };
 
@@ -169,7 +185,6 @@ const blinkTimeouts = new Map<string, number>();
 let renderQueued = false;
 let reconnectTimer: number | null = null;
 let reconnectAttempts = 0;
-let isDisposed = false;
 
 const scheduleRender = () => {
     if (!chartInstance || !optionBuilder || renderQueued || isDisposed) return;
@@ -502,8 +517,8 @@ onMounted(() => {
             const coreGateway = nodes.value.find(n => n.category === 'gateway');
             if (coreGateway) {
                 // Core Pulse Rings - 根据吞吐量调整颜色和脉冲频率
-                const maxThroughput = 3000;
-                const throughputIntensity = Math.min(1, gatewayThroughput.value / maxThroughput);
+                const maxThroughput = 5000;
+                const throughputIntensity = Math.min(1, displayGatewayThroughput.value / maxThroughput);
                 const redValue = Math.floor(255 * (0.6 + 0.4 * throughputIntensity));
                 const greenValue = Math.floor(113 * (1 - 0.6 * throughputIntensity));
                 const gatewayColor = `rgb(${redValue}, ${greenValue}, 133)`;
@@ -679,14 +694,20 @@ onMounted(() => {
                             prefix = selectedNames.indexOf(p.name) === 0 ? '【SOURCE】' : '【TARGET】';
                         }
 
-                        if (isGateway) return `{name|${p.name}}\n{tput|Total Throughput: ${Math.round(gatewayThroughput.value)} Mbps}\n{stage|${props.stage.id}}`;
-                        return `{name|${prefix}${p.name}}\n{ip|${p.value}}\n{tput|${tput}}\n{badge| ${ctx.text} }`;
+                        if (isGateway) {
+                            const tput = Math.round(displayGatewayThroughput.value);
+                            const isHeavy = tput > 4200;
+                            const statusText = isHeavy ? '⚠️ HEAVY' : 'NORMAL';
+                            return `{name|${p.name}}\n{tput|Load: ${tput} Mbps}\n{stage|${statusText}}`;
+                        }
+                        const ip = Array.isArray(p.value) ? p.value[2] : p.value;
+                        return `{name|${prefix}${p.name}}\n{ip|${ip}}\n{tput|${tput}}\n{badge| ${ctx.text} }`;
                     },
                     rich: {
                         name: { fontSize: 11, fontWeight: 'bold', color: '#e5e7eb', padding: [0, 0, 1, 0], align: 'center' },
                         ip: { fontSize: 9, color: '#9ca3af', align: 'center', padding: [0, 0, 1, 0] },
-                        tput: { fontSize: 9, color: '#7dd3fc', align: 'center', padding: [0, 0, 2, 0], fontWeight: 'bold' },
-                        stage: { fontSize: 10, color: '#fff', backgroundColor: theme.danger, padding: [2, 4], borderRadius: 4, fontWeight: 'bold' },
+                        tput: { fontSize: 10, color: '#7dd3fc', align: 'center', padding: [0, 0, 2, 0], fontWeight: 'bold' },
+                        stage: { fontSize: 10, color: '#fff', backgroundColor: theme.danger, padding: [2, 6], borderRadius: 4, fontWeight: 'bold' },
                         badge: { fontSize: 8, color: '#fff', backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'currentColor', borderWidth: 1, padding: [1, 3], borderRadius: 2 }
                     }
                 },
@@ -697,7 +718,7 @@ onMounted(() => {
                     const opacity = (isGlobal && !isGateway && !isActive) ? 0.2 : 1.0;
                     const sid = (viewMode.value === 'all' || isActive) ? node.stageId : (isSelected ? props.stage.id : node.stageId);
                     const ctx = getStageContext(sid);
-                    let color = isGateway ? getGatewayColor(gatewayThroughput.value) : (isSelected ? ctx.color : (isGlobal ? ctx.color : theme.textMuted));
+                    let color = isGateway ? getGatewayColor(displayGatewayThroughput.value) : (isSelected ? ctx.color : (isGlobal ? ctx.color : theme.textMuted));
                     let shadowBlur = isSelected ? 30 : 5;
                     const isGatewayProcessing = isGateway && nodes.value.some(n => n.isBlinking && (n.stageId === 'DECRYPT' || n.stageId === 'HASH'));
                     if (isGatewayProcessing) {
@@ -707,17 +728,20 @@ onMounted(() => {
                         color = theme.warning;
                         shadowBlur = 25;
                     }
-                    // 只为网关节点渲染SVG，其余全部为实心小圆点
+
+                    // 核心修复：为所有节点提供正确的 cartesian2d 坐标 (value: [x, y])
+                    // 这样 ECharts 的 graph links 和 lines series 才能正确寻找坐标点
                     return {
                         ...node,
+                        value: [node.x, node.y, node.value], // [x, y, ip_address]
                         symbol: isGateway ? 'image://' + gatewaySvgRaw : 'circle',
                         symbolKeepAspect: isGateway,
-                        symbolSize: isGateway ? 55 : 16, // 放大终端节点圆点
+                        symbolSize: isGateway ? 55 : 16,
                         itemStyle: {
-                            opacity: 1, // 终端节点始终完全可见
-                            color: !isGateway ? '#00eaff' : color, // 终端节点高亮为亮青色
+                            opacity: 1,
+                            color: !isGateway ? '#00eaff' : color,
                             shadowBlur: isGateway ? shadowBlur : 0,
-                            shadowColor: isGateway ? `${color}${isSelected || isGatewayProcessing || node.isBlinking ? 'B0' : '40'})` : undefined
+                            shadowColor: isGateway ? color : undefined
                         },
                         label: {
                             show: opacity > 0.3,
@@ -796,9 +820,9 @@ onMounted(() => {
                                         `PROTO: SM4-CBC/CTR-V2.0`,
                                         `AUTH: SM2-ID-CERT-V1.28`,
                                         `IO: ${nodes.value.filter(n => n.isBlinking).length} Act / ${nodes.value.length} Node`,
-                                        `Throughput: ${Math.round(gatewayThroughput.value)} Mbps`,
-                                        `Processing Rate: ${(gatewayThroughput.value / 8).toFixed(1)} MB/s`,
-                                        `GATEWAY SPEEDUP: ${(gatewayThroughput.value / 800).toFixed(1)}x`,
+                                        `Throughput: ${Math.round(displayGatewayThroughput.value)} Mbps`,
+                                        `Processing Rate: ${(displayGatewayThroughput.value / 8).toFixed(1)} MB/s`,
+                                        `GATEWAY SPEEDUP: ${(displayGatewayThroughput.value / 800).toFixed(1)}x`,
                                         `STATUS: LIVE-STREAMING`,
                                         `RISC-V: HARDWARE-ACCEL`,
                                     ].join('\n'),
