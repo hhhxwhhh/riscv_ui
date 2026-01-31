@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted, watch, computed } from 'vue';
+import { onMounted, ref, onUnmounted, watch, computed, toRef } from 'vue';
 import * as echarts from 'echarts';
-import type { StageInfo } from '../api/stages';
+import { STAGES, type StageInfo } from '../api/stages';
+import { type DeviceInfo, THEME } from './DeviceTopology.types';
 import gatewaySvgRaw from '../svgs/gateway.svg?raw';
-
-type DeviceInfo = {
-    id?: string;
-    name: string;
-    ip: string;
-    status?: string;
-};
+import { useTopologyData } from '../composables/useTopologyData';
 
 const props = defineProps<{
     modelValue?: string | string[]; // Support array for multi-track
@@ -21,37 +16,23 @@ const emit = defineEmits(['update:modelValue', 'node-select', 'ws-status', 'ws-l
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
+let renderQueued = false;
+let triggerRenderFn: (() => void) | null = null;
 
-// Track multiple selections
-const selectedNodeNames = ref<string[]>(
-    Array.isArray(props.modelValue) ? props.modelValue : (props.modelValue ? [props.modelValue] : [])
+const geographyStageId = computed(() => props.stage.id);
+const topology = useTopologyData(
+    toRef(props, 'devices'),
+    geographyStageId,
+    toRef(props, 'modelValue'),
+    emit,
+    () => { if (triggerRenderFn) triggerRenderFn() }
 );
 
-const viewMode = ref<'stage' | 'device' | 'all'>('stage');
+const { nodes, deviceNodes, selectedNodeNames, viewMode, displayGatewayThroughput, selectNode, startDataListener } = topology;
+
 let optionBuilder: ((selectedNames: string[]) => echarts.EChartsOption) | null = null;
-let isDisposed = false;
 
-// 原始网关内部计算值
-const rawGatewayThroughput = computed(() => {
-    return deviceNodes.value.reduce((sum, node) => sum + (node.throughput || 0), 0);
-});
-
-// 平滑显示值，用于颜色和视觉渐变
-const displayGatewayThroughput = ref(0);
-
-// 使用每一帧趋近目标值的方式实现“渐变”效果
-const animateGatewayThroughput = () => {
-    if (isDisposed) return;
-    const diff = rawGatewayThroughput.value - displayGatewayThroughput.value;
-    if (Math.abs(diff) > 0.5) {
-        displayGatewayThroughput.value += diff * 0.08; // 8% 的趋近率
-        scheduleRender();
-    }
-    requestAnimationFrame(animateGatewayThroughput);
-};
-
-// 启动平滑动画
-requestAnimationFrame(animateGatewayThroughput);
+// Gateway animation handled by composable
 
 // 根据吞吐量计算网关颜色（从浅红到深红）
 const getGatewayColor = (throughput: number) => {
@@ -65,133 +46,14 @@ const getGatewayColor = (throughput: number) => {
 };
 
 
-// Define Nodes Configuration (Made Reactive for Real Data updates)
-// We add 'isBlinking' state to track activity and stageId for individual flow status
-type NodeData = {
-    name: string;
-    x: number;
-    y: number;
-    value: string;
-    category: string;
-    isBlinking: boolean;
-    stageId: string;
-    throughput: number; // For traffic variation
-    description?: string;
-};
-const nodes = ref<NodeData[]>([]);
-
-const calculatePositions = (count: number) => {
-    const centerX = 400;
-    const centerY = 200; // Shifted slightly for better fit
-    const radiusX = 350;
-    const radiusY = 175;
-
-    // Generate dozens of points in a responsive arc or circle
-    return Array.from({ length: count }, (_, i) => {
-        // Use full circle if count is high, otherwise arc
-        const isHighCount = count > 30;
-        const angle = isHighCount
-            ? (i / count) * 2 * Math.PI
-            : (i / (count - 1 || 1)) * Math.PI - Math.PI;
-
-        return {
-            x: centerX + Math.cos(angle) * (isHighCount ? radiusX * 0.9 : radiusX),
-            y: centerY + Math.sin(angle) * (isHighCount ? radiusY * 0.9 : radiusY)
-        };
-    });
-};
-
-const buildNodesFromDevices = (devices?: DeviceInfo[]) => {
-    const previousState = new Map(nodes.value.map((node) => [node.name, {
-        isBlinking: node.isBlinking,
-        throughput: node.throughput,
-        stageId: node.stageId
-    }]));
-    const stageIds = ['AUTH', 'ENCRYPT', 'DECRYPT', 'HASH'];
-
-    // If no devices provided, generate 60 demo devices with varied names
-    const defaultDevices = Array.from({ length: 60 }, (_, i) => {
-        const types = ['Sensor', 'Camera', 'Node', 'Relay', 'Terminal'];
-        const type = types[i % types.length];
-        return {
-            name: `IoT ${type} ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ''}`,
-            ip: `192.168.1.${100 + i}`,
-            type: 'device'
-        };
-    });
-
-    const gatewayName = 'A100 Gateway';
-    // Filter and deduplicate: Remove any device that matches the gateway name or has a duplicate name
-    const seenNames = new Set([gatewayName]);
-    const deviceList = ((devices && devices.length) ? devices : defaultDevices)
-        .filter(device => {
-            if (!device.name || seenNames.has(device.name)) return false;
-            seenNames.add(device.name);
-            return true;
-        });
-
-    const positions = calculatePositions(deviceList.length);
-
-    const gateway = {
-        name: gatewayName,
-        x: 400,
-        y: 200,
-        value: '192.168.1.1',
-        category: 'gateway',
-        isBlinking: previousState.get(gatewayName)?.isBlinking || false,
-        stageId: props.stage.id || 'AUTH',
-        throughput: previousState.get(gatewayName)?.throughput || 100,
-        description: 'Secure RISC-V Cryptoverse Hub'
-    };
-
-    const deviceNodes = deviceList.map((device, index) => {
-        const pos = positions[index] || { x: 0, y: 0 };
-        const prevState = previousState.get(device.name);
-        // 更真实的默认吞吐量（1~10Mbps，随机分布，稍后统一降为十分之一）
-        const defaultTput = Math.floor(Math.random() * 10) + 1;
-        return {
-            name: device.name,
-            x: pos.x,
-            y: pos.y,
-            value: device.ip,
-            category: 'device',
-            isBlinking: prevState?.isBlinking || false,
-            stageId: prevState?.stageId || stageIds[index % stageIds.length] || 'AUTH',
-            throughput: prevState?.throughput || defaultTput
-        };
-    });
-
-    nodes.value = [gateway, ...deviceNodes];
-};
-
-buildNodesFromDevices(props.devices);
-
-// ----------------------------------------------------------------------
-// Real Data Interface
-// ----------------------------------------------------------------------
-
-// WebSocket Configuration
-// Use environment variable VITE_WS_URL if available, otherwise fallback to local mock server
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080';
-let socket: WebSocket | null = null;
-
-type TelemetryPacket = {
-    source: string;
-    status?: string;
-    [key: string]: unknown;
-};
-
-const blinkTimeouts = new Map<string, number>();
-let renderQueued = false;
-let reconnectTimer: number | null = null;
-let reconnectAttempts = 0;
+// Nodes handled by composable
 
 const scheduleRender = () => {
-    if (!chartInstance || !optionBuilder || renderQueued || isDisposed) return;
+    if (!chartInstance || !optionBuilder || renderQueued) return;
     renderQueued = true;
     requestAnimationFrame(() => {
         renderQueued = false;
-        if (isDisposed || !chartInstance) return;
+        if (!chartInstance) return; // Note: isDisposed check handled by component unmount mostly
         try {
             chartInstance.setOption(optionBuilder!(selectedNodeNames.value));
         } catch (err) {
@@ -199,168 +61,20 @@ const scheduleRender = () => {
         }
     });
 };
+triggerRenderFn = scheduleRender;
 
-const handleIncomingPacket = (packet: TelemetryPacket) => {
-    if (isDisposed) return;
-    emit('ws-last-message', Date.now());
-    emit('telemetry', packet);
+const theme = THEME;
 
-    // 修复：如果不是普通的遥测数据（例如设备加入/退出消息），则跳过后续的节点更新逻辑
-    if (!packet?.source || packet.type === 'device_join' || packet.type === 'device_exit') return;
-
-    // Use value (IP) to find node
-    const targetNode = nodes.value.find(n => n.value === packet.source || n.value.includes(packet.source));
-
-    if (targetNode) {
-        // Update stage if provided (lifecycle logic)
-        if (packet.stageId && typeof packet.stageId === 'string') {
-            targetNode.stageId = packet.stageId;
-        }
-
-        // Update traffic metrics
-        if (packet.metrics && typeof packet.metrics === 'object') {
-            const m = packet.metrics as any;
-            if (m.throughput) {
-                targetNode.throughput = Number(m.throughput) / 10;
-            }
-        }
-
-        // Activate Blink State
-        targetNode.isBlinking = true;
-
-        // Trigger visual update
-        scheduleRender();
-
-        // If it's the last stage, clear its active status after a longer period to show completion
-        // Otherwise, standard 1100ms blink (matches mock-server 1200ms cycle)
-        const clearDelay = packet.isLastStage ? 3000 : 1100;
-
-        const existing = blinkTimeouts.get(targetNode.name);
-        if (existing) window.clearTimeout(existing);
-
-        const timeoutId = window.setTimeout(() => {
-            if (isDisposed) return;
-            targetNode.isBlinking = false;
-            // Optionally reset throughput to 0 or low value when inactive
-            targetNode.throughput = 0;
-            scheduleRender();
-            blinkTimeouts.delete(targetNode.name);
-        }, clearDelay);
-        blinkTimeouts.set(targetNode.name, timeoutId);
-    }
-};
-
-const scheduleReconnect = () => {
-    if (isDisposed) return;
-    if (reconnectTimer) window.clearTimeout(reconnectTimer);
-    const baseDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-    const jitter = Math.floor(Math.random() * 250);
-    const delay = baseDelay + jitter;
-    reconnectTimer = window.setTimeout(() => {
-        reconnectAttempts += 1;
-        startDataListener();
-    }, delay);
-};
-
-const startDataListener = () => {
-    if (isDisposed) return;
-    emit('ws-status', 'connecting');
-    // Clean up existing socket if any
-    if (socket) {
-        socket.close();
-    }
-
-    try {
-        socket = new WebSocket(WS_URL);
-
-        socket.onopen = () => {
-            reconnectAttempts = 0;
-            emit('ws-status', 'connected');
-            console.log(`Connected to Telemetry Server at ${WS_URL}`);
-        };
-
-        socket.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                handleIncomingPacket(data);
-            } catch (err) {
-                console.error('Error parsing telemetry data:', err);
-            }
-        };
-
-        socket.onerror = (err) => {
-            emit('ws-status', 'disconnected');
-            console.error('WebSocket error:', err);
-        };
-
-        socket.onclose = (event) => {
-            if (isDisposed) return;
-            emit('ws-status', 'disconnected');
-            console.warn('WebSocket closed. Code:', event.code, 'Reason:', event.reason, 'Reconnecting...');
-            scheduleReconnect();
-        };
-    } catch (err) {
-        emit('ws-status', 'disconnected');
-        console.error('Failed to establish WebSocket connection:', err);
-        // 即使连接失败也要尝试重连
-        scheduleReconnect();
-    }
-};
-
-const theme = {
-    primary: '#7dd3fc',
-    success: '#34d399',
-    danger: '#fb7185',
-    accent: '#a78bfa',
-    warning: '#fbbf24',
-    grid: '#243047',
-    line: '#1f3b72',
-    lineReturn: '#0f4c3a',
-    textMuted: '#94a3b8'
-};
-
-const deviceNodes = computed(() => nodes.value.filter(node => node.category === 'device'));
-
-const applySelection = (names: string[]) => {
-    if (!chartInstance || !optionBuilder || isDisposed) return;
-    selectedNodeNames.value = names;
-    scheduleRender();
-};
-
-const selectNode = (name: string) => {
-    if (name === 'Gateway' || name === 'A100 Gateway') return;
-
-    let newSelections = [...selectedNodeNames.value];
-    const index = newSelections.indexOf(name);
-
-    if (index > -1) {
-        newSelections.splice(index, 1);
-    } else {
-        // Limit to 2 for direct "A to B" tracking, or 3 for general monitoring
-        if (newSelections.length >= 2) {
-            newSelections.shift(); // Remove oldest
-        }
-        newSelections.push(name);
-    }
-
-    selectedNodeNames.value = newSelections;
-    emit('update:modelValue', newSelections);
-
-    const firstNode = nodes.value.find(n => n.name === newSelections[0]);
-    emit('node-select', firstNode || { name: '', value: '' });
-    applySelection(newSelections);
-};
+// Logic moved to composable
 
 const getStageContext = (stageId: string) => {
-    let color = theme.primary;
-    let text = 'PENDING';
-    switch (stageId) {
-        case 'AUTH': color = theme.accent; text = 'IDENTITY AUTH'; break;
-        case 'ENCRYPT': color = theme.success; text = 'ENCRYPTED'; break;
-        case 'DECRYPT': color = '#f472b6'; text = 'DECRYPTION'; break;
-        case 'HASH': color = theme.warning; text = 'SM3 HASHING'; break;
-    }
-    return { color, text };
+    const stageMap: Record<string, { color: string; text: string }> = {
+        AUTH: { color: theme.accent, text: 'IDENTITY AUTH' },
+        ENCRYPT: { color: theme.success, text: 'ENCRYPTED' },
+        DECRYPT: { color: '#f472b6', text: 'DECRYPTION' },
+        HASH: { color: theme.warning, text: 'SM3 HASHING' }
+    };
+    return stageMap[stageId] || { color: theme.primary, text: 'PENDING' };
 };
 
 onMounted(() => {
@@ -377,8 +91,9 @@ onMounted(() => {
             const nodeMap: Record<string, [number, number]> = {};
             nodes.value.forEach(n => nodeMap[n.name] = [n.x, n.y]);
 
-            const stageIds = ['AUTH', 'ENCRYPT', 'DECRYPT', 'HASH'];
-            const linesByStage: Record<string, any[]> = { AUTH: [], ENCRYPT: [], DECRYPT: [], HASH: [] };
+            const stageIds = STAGES.map(s => s.id);
+            const linesByStage: Record<string, any[]> = {};
+            stageIds.forEach(id => linesByStage[id] = []);
 
             const isGlobal = selectedNames.length === 0;
             const isRelayMode = selectedNames.length === 2; // Tracking A to B
@@ -946,7 +661,7 @@ onMounted(() => {
         };
 
         optionBuilder = getOption;
-        applySelection(selectedNodeNames.value);
+        scheduleRender();
 
         // Robust Click Handler on the transparent Interaction Layer
         chartInstance.on('click', (params: any) => {
@@ -965,17 +680,12 @@ const handleResize = () => {
 };
 
 const handleVisibilityChange = () => {
-    if (document.hidden) {
-        if (socket) socket.close();
-        return;
-    }
-    if (!socket || socket.readyState === WebSocket.CLOSED) {
+    if (!document.hidden) {
         startDataListener();
     }
 };
 
 onUnmounted(() => {
-    isDisposed = true;
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
 
@@ -984,41 +694,12 @@ onUnmounted(() => {
         chartInstance = null;
     }
     optionBuilder = null;
-
-    if (socket) {
-        socket.close();
-        socket = null;
-    }
-    if (reconnectTimer) window.clearTimeout(reconnectTimer);
-    blinkTimeouts.forEach((id) => window.clearTimeout(id));
-    blinkTimeouts.clear();
-    emit('ws-status', 'disconnected');
+    // Socket cleanup handled by composable
 });
 
 watch(
     () => props.stage,
     () => {
-        scheduleRender();
-    },
-    { deep: true }
-);
-
-watch(
-    () => props.modelValue,
-    (next) => {
-        if (!next) return;
-        const nextArr = Array.isArray(next) ? next : [next];
-        // Check if content is different
-        if (JSON.stringify(nextArr) === JSON.stringify(selectedNodeNames.value)) return;
-        applySelection(nextArr);
-    }
-);
-
-watch(
-    () => props.devices,
-    (next) => {
-        buildNodesFromDevices(next);
-        // 修复：移除自动选中首个节点的逻辑，允许初始状态保持为空（即展示 All Devices / 全局模式）
         scheduleRender();
     },
     { deep: true }
