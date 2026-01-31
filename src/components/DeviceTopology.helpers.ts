@@ -1,3 +1,25 @@
+import { THEME } from './DeviceTopology.types';
+
+export const getStageContext = (stageId: string) => {
+    const stageMap: Record<string, { color: string; text: string }> = {
+        AUTH: { color: THEME.accent, text: 'IDENTITY AUTH' },
+        ENCRYPT: { color: THEME.success, text: 'ENCRYPTED' },
+        DECRYPT: { color: '#f472b6', text: 'DECRYPTION' },
+        HASH: { color: THEME.warning, text: 'SM3 HASHING' }
+    };
+    return stageMap[stageId] || { color: THEME.primary, text: 'PENDING' };
+};
+
+export const getGatewayColor = (throughput: number) => {
+    const maxExpectedThroughput = 5000;
+    const intensity = Math.min(1, throughput / maxExpectedThroughput);
+
+    const red = 255;
+    const green = Math.floor(255 * (1 - intensity * 0.85)); // 颜色变化更明显
+    const blue = Math.floor(255 * (1 - intensity * 0.85));
+    return `rgb(${red}, ${green}, ${blue})`;
+};
+
 export const calculatePositions = (count: number) => {
     const centerX = 400;
     const centerY = 200; // Shifted slightly for better fit
