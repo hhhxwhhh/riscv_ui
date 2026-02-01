@@ -128,7 +128,7 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             coordinateSystem: 'cartesian2d',
             silent: true,
             data: [{ value: [gateway.x, gateway.y] }],
-            symbolSize: 100 + 40 * intensity,
+            symbolSize: 70 + 25 * intensity,
             rippleEffect: { brushType: 'stroke', scale: 2.0, period: 3.5 - 1.5 * intensity, color: color },
             itemStyle: { color: `rgba(${rgb[0]}, ${rgb[1]}, 133, ${alpha})`, shadowBlur: 20, shadowColor: color },
             z: 0
@@ -139,7 +139,7 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             coordinateSystem: 'cartesian2d',
             silent: true,
             data: [{ value: [gateway.x, gateway.y] }],
-            symbolSize: 140 + 60 * intensity,
+            symbolSize: 95 + 35 * intensity,
             rippleEffect: { brushType: 'stroke', scale: 2.8, period: 5 - 2 * intensity, color: color },
             itemStyle: { color: 'transparent', borderColor: color, borderWidth: 1, opacity: 0.15 + (0.15 * intensity) },
             z: 0
@@ -249,7 +249,12 @@ const buildNodeLayer = (
             const data = params?.data || {};
             const isGateway = name.includes('Gateway');
             const isActive = !!data.isBlinking;
-            return isGateway ? 65 : (isActive ? 30 : 24);
+            const isDense = nodes.length > 40;
+            if (isGateway) return isDense ? 58 : 65;
+            const base = isDense ? 16 : 22;
+            const active = isDense ? 22 : 28;
+            const size = isActive ? active : base;
+            return [Math.round(size * 1.4), size];
         },
         label: {
             show: false,
@@ -284,13 +289,16 @@ const buildNodeLayer = (
                 }
 
                 const statusDot = isActive ? '{activeDot|●} ' : '';
-                const tputStr = node.throughput ? `\n{tput|${Math.round(node.throughput)} Mbps}` : '';
+                const tputStr = `\n{tput|${Math.round(node.throughput || 0)} Mbps}`;
+                const stageText = getStageContext(node.stageId || 'AUTH').text;
+                const stageStr = `\n{stage|${stageText}}`;
 
-                return `{name|${prefix}${p.name}}\n${statusDot}{ip|${node.value}}${tputStr}`;
+                return `{name|${prefix}${p.name}}\n${statusDot}{ip|${node.value}}${stageStr}${tputStr}`;
             },
             rich: {
                 name: { fontSize: 11, fontWeight: 'bold', color: '#f8fafc', align: 'center', lineHeight: 16 },
                 ip: { fontSize: 9, color: '#94a3b8', align: 'center', padding: [0, 2] },
+                stage: { fontSize: 9, color: '#cbd5f5', align: 'center', padding: [2, 0, 0, 0] },
                 tput: { fontSize: 10, color: '#38bdf8', align: 'center', fontWeight: 'bold', padding: [2, 0, 0, 0] },
                 activeDot: { fontSize: 9, color: '#34d399' },
                 gatewayName: { fontSize: 13, fontWeight: 'bold', color: '#fff', align: 'center', padding: [0, 0, 6, 0] },
@@ -326,6 +334,7 @@ const buildNodeLayer = (
                 value: [node.x, node.y, node.value], // Cartesian coordinate requires value array
                 symbol: isGateway ? 'image://' + gatewaySvg : 'circle',
                 symbolKeepAspect: isGateway,
+                symbolSize: isGateway ? undefined : [Math.round((nodes.length > 40 ? 16 : 22) * 1.4), (nodes.length > 40 ? 16 : 22)],
                 itemStyle: {
                     color: !isGateway ? '#020617' : color,
                     borderColor: color,
@@ -380,7 +389,7 @@ export const buildChartOption = (
     nodes.forEach(n => nodeMap[n.name] = [n.x, n.y]);
 
     // 2. Prepare Flow Lines
-    const shouldCalculateFlows = !isGlobal || !isLargeMode; // Or refined logic
+    const shouldCalculateFlows = true;
     const linesByStage = shouldCalculateFlows 
         ? calculateFlowLines(nodes, selectedNames, viewMode, stageId, nodeMap)
         : {};

@@ -25,17 +25,10 @@ export const getGatewayColor = (throughput: number) => {
  */
 export const calculateTopologyLayout = (width: number, height: number, nodeCount: number) => {
     // 1. Definition of Safe Area
-    // The left panel (System Telemetry) takes up ~240px width.
-    // We visually shift the center to the right to avoid overlap.
+    // Center the layout horizontally within the canvas.
+    const usableWidth = width;
     
-    // Heuristic: If screen is wide enough, assume left panel is present and active.
-    const LEFT_PANEL_WIDTH = 280; 
-    const hasLeftPanel = width > 900; 
-    
-    const usableXStart = hasLeftPanel ? LEFT_PANEL_WIDTH : 0;
-    const usableWidth = width - usableXStart;
-    
-    const centerX = usableXStart + (usableWidth / 2);
+    const centerX = usableWidth / 2;
     const centerY = height / 2;
 
     // 2. Gateway Position
@@ -48,15 +41,15 @@ export const calculateTopologyLayout = (width: number, height: number, nodeCount
 
     // 4. Multi-ring Node Distribution for dense graphs
     // Desired min arc spacing (approx label width + gap)
-    const minArcSpacing = 110;
-    const maxPerRing = Math.max(10, Math.floor((2 * Math.PI * radius) / minArcSpacing));
+    const minArcSpacing = 140;
+    const maxPerRing = Math.max(8, Math.floor((2 * Math.PI * radius) / minArcSpacing));
     const ringCount = Math.max(1, Math.ceil(nodeCount / maxPerRing));
-    const ringStep = Math.min(110, Math.max(70, radius / (ringCount + 1)));
+    const ringStep = Math.min(130, Math.max(85, radius / (ringCount + 0.5)));
 
     const rings = Array.from({ length: ringCount }, (_, i) => {
         const r = radius - (ringCount - 1 - i) * ringStep;
         const rClamped = Math.max(120, r);
-        const rx = rClamped * (usableWidth > height * 1.2 ? 1.25 : 1.0);
+        const rx = rClamped * (usableWidth > height * 1.2 ? 1.35 : 1.05);
         const ry = rClamped;
         return { rx, ry };
     });
@@ -66,8 +59,9 @@ export const calculateTopologyLayout = (width: number, height: number, nodeCount
     for (let ringIndex = 0; ringIndex < ringCount; ringIndex += 1) {
         const remaining = nodeCount - nodeIndex;
         const capacity = Math.min(maxPerRing, remaining);
-        const { rx, ry } = rings[ringIndex];
-        const offset = (ringIndex * 15 * Math.PI) / 180; // stagger rings
+        const ring = rings[ringIndex] || { rx: radius, ry: radius };
+        const { rx, ry } = ring;
+        const offset = (ringIndex * 18 * Math.PI) / 180; // stagger rings
 
         for (let i = 0; i < capacity; i += 1) {
             const angle = (i / capacity) * 2 * Math.PI - (Math.PI / 2) + offset;
