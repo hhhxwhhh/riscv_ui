@@ -138,22 +138,9 @@ const loadDevices = async (isBackground = false) => {
 
     apiStatus.value = 'ready';
   } catch (error) {
-    console.warn('Failed to load devices from API, using simulation data:', error);
-    
-    // 使用模拟数据作为回退
-    if (!isBackground) {
-      // 生成模拟设备数据
-      const simulatedDevices = Array.from({ length: 30 }, (_, i) => ({
-        id: `sim-device-${i+1}`,
-        name: `IoT Sensor ${String.fromCharCode(65 + i)}`,
-        ip: `192.168.1.${100 + i}`
-      }));
-      
-      devices.value = simulatedDevices;
-      apiStatus.value = 'ready';
-    } else {
-      apiStatus.value = 'error';
-    }
+    console.error('Failed to load devices from API:', error);
+    apiStatus.value = 'error';
+    // No simulation data fallback
   }
 };
 
@@ -280,7 +267,7 @@ onMounted(() => {
           <div class="panel px-3 py-2 border-l-2 border-amber-500/50" v-if="currentStage">
             <div class="text-[10px] uppercase subtle-text">Current Status</div>
             <div class="text-base font-semibold text-amber-200 mt-0.5 truncate animate-pulse">{{ currentStage.statusText
-            }}</div>
+              }}</div>
           </div>
         </div>
       </header>

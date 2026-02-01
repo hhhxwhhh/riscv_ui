@@ -18,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits(['update:modelValue', 'node-select', 'ws-status', 'ws-last-message', 'telemetry']);
 
 const chartRef = ref<HTMLElement | null>(null);
+const chartSize = ref<{ width: number; height: number } | null>(null);
 let chartInstance: echarts.ECharts | null = null;
 let renderQueued = false;
 let triggerRenderFn: (() => void) | null = null;
@@ -28,7 +29,8 @@ const topology = useTopologyData(
     geographyStageId,
     toRef(props, 'modelValue'),
     emit,
-    () => { if (triggerRenderFn) triggerRenderFn() }
+    () => { if (triggerRenderFn) triggerRenderFn() },
+    chartSize
 );
 
 const { nodes, deviceNodes, selectedNodeNames, viewMode, displayGatewayThroughput, selectNode, startDataListener } = topology;
@@ -61,6 +63,12 @@ onMounted(() => {
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');
 
+        // initialize chart size for composable positioning
+        chartSize.value = {
+            width: chartRef.value.clientWidth,
+            height: chartRef.value.clientHeight
+        };
+
         // Initial Emit
         const initialNode = nodes.value.find(n => selectedNodeNames.value.includes(n.name));
         if (initialNode) emit('node-select', initialNode);
@@ -71,7 +79,9 @@ onMounted(() => {
             viewMode.value,
             props.stage.id,
             displayGatewayThroughput.value,
-            gatewaySvgRaw
+            gatewaySvgRaw,
+            chartSize.value?.width || 800,
+            chartSize.value?.height || 400
         );
 
         scheduleRender();
@@ -90,6 +100,9 @@ onMounted(() => {
 
 const handleResize = () => {
     chartInstance?.resize();
+    if (chartRef.value) {
+        chartSize.value = { width: chartRef.value.clientWidth, height: chartRef.value.clientHeight };
+    }
 };
 
 const handleVisibilityChange = () => {

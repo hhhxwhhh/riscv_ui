@@ -1,8 +1,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
-import { STAGES } from '../api/stages';
 import type { DeviceInfo, NodeData } from '../components/DeviceTopology.types';
-import { calculatePositions } from '../components/DeviceTopology.helpers';
+import { calculatePositions, getTopologyCenter, getCenterY } from '../components/DeviceTopology.helpers';
 
 export function useTopologyData(
     devicesSource: Ref<DeviceInfo[] | undefined>,
@@ -11,6 +10,11 @@ export function useTopologyData(
     emit: (event: any, ...args: any[]) => void,
     triggerRender: () => void
 ) {
+    // Optional: a ref with chart size { width, height } can be passed by the caller
+    // to ensure positions are calculated relative to the actual chart container.
+    // Keep backward compatibility by checking for an extra argument.
+    const extraArg = arguments[5] as Ref<{ width: number; height: number } | undefined> | undefined;
+    const chartSizeRef = extraArg;
     const nodes = ref<NodeData[]>([]);
     
     // Normalize initial selection
@@ -50,34 +54,11 @@ export function useTopologyData(
             throughput: node.throughput,
             stageId: node.stageId
         }]));
-        const stageIds = STAGES.map(s => s.id);
-
-        const defaultDevices = Array.from({ length: 60 }, (_, i) => {
-            const types = ['Sensor', 'Camera', 'Node', 'Relay', 'Terminal'];
-            const type = types[i % types.length];
-            return {
-                name: `IoT ${type} ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ''}`,
-                ip: `192.168.1.${100 + i}`,
-                type: 'device'
-            };
-        });
-
-        // SIMULATION FOR LARGE DATASET
-        // Uncomment/Use this block to test WebGL performance with > 500 nodes
-        const isSimulationMode = true; // Set to true to force 2000 nodes for testing
-        let simulationDevices: any[] = [];
-        if (isSimulationMode) {
-             simulationDevices = Array.from({ length: 2000 }, (_, i) => ({
-                name: `SimNode-${i}`,
-                ip: `10.0.${Math.floor(i / 255)}.${i % 255}`,
-                type: 'device'
-            }));
-        }
 
         const gatewayName = 'A100 Gateway';
         const seenNames = new Set([gatewayName]);
         
-        const sourceList = isSimulationMode ? simulationDevices : ((devices && devices.length) ? devices : defaultDevices);
+        const sourceList = (devices || []);
         
         const deviceList = sourceList
             .filter(device => {
@@ -86,12 +67,16 @@ export function useTopologyData(
                 return true;
             });
 
-        const positions = calculatePositions(deviceList.length);
+        // determine chart size if provided
+        const chartSize = chartSizeRef && chartSizeRef.value ? chartSizeRef.value : undefined;
+        const positions = calculatePositions(deviceList.length, chartSize?.width, chartSize?.height);
 
+        // compute centerY consistent with positions
+        const centerY = chartSize ? getCenterY(chartSize.height, deviceList.length) : getTopologyCenter().centerY;
         const gateway = {
             name: gatewayName,
-            x: 400,
-            y: 200,
+            x: chartSize ? Math.floor((chartSize.width) * 0.5) : 400,
+            y: centerY, // 跟动态 centerY 保持一致
             value: '192.168.1.1',
             category: 'gateway',
             isBlinking: previousState.get(gatewayName)?.isBlinking || false,
@@ -103,7 +88,8 @@ export function useTopologyData(
         const newDeviceNodes = deviceList.map((device, index) => {
             const pos = positions[index] || { x: 0, y: 0 };
             const prevState = previousState.get(device.name);
-            const defaultTput = Math.floor(Math.random() * 10) + 1;
+            // Default to 0 throughput if no previous state, avoid random fake data
+            const defaultTput = 0; 
             return {
                 name: device.name,
                 x: pos.x,
@@ -111,7 +97,8 @@ export function useTopologyData(
                 value: device.ip,
                 category: 'device',
                 isBlinking: prevState?.isBlinking || false,
-                stageId: prevState?.stageId || stageIds[index % stageIds.length] || 'AUTH',
+                // Default to 'AUTH' if no previous state, avoid assigning random stages
+                stageId: prevState?.stageId || 'AUTH',
                 throughput: prevState?.throughput || defaultTput
             };
         });

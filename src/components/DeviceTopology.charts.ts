@@ -9,7 +9,9 @@ export const buildChartOption = (
     viewMode: string,
     stageId: string,
     displayGatewayThroughput: number,
-    gatewaySvgRaw: string
+    gatewaySvgRaw: string,
+    width: number = 800,
+    height: number = 400
 ): echarts.EChartsOption => {
     const isGlobal = selectedNames.length === 0;
     const isRelayMode = selectedNames.length === 2;
@@ -586,8 +588,8 @@ export const buildChartOption = (
             padding: 0,
             textStyle: { color: '#f3f4f6' }
         },
-        xAxis: { show: false, min: 0, max: 800, type: 'value' },
-        yAxis: { show: false, min: 0, max: 400, type: 'value' },
+        xAxis: { show: false, min: 0, max: width, type: 'value' },
+        yAxis: { show: false, min: 0, max: height, type: 'value' },
         grid: { top: 40, bottom: 20, left: 20, right: 20 },
         series: series,
         backgroundColor: 'transparent'
