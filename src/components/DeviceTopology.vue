@@ -57,6 +57,13 @@ triggerRenderFn = scheduleRender;
 
 const theme = THEME;
 
+const clearSelection = () => {
+    selectedNodeNames.value = [];
+    emit('update:modelValue', []);
+    emit('node-select', { name: '', value: '' });
+    if (triggerRenderFn) triggerRenderFn();
+};
+
 onMounted(() => {
     startDataListener();
 
@@ -148,6 +155,10 @@ watch(
                         :class="viewMode === 'all' ? 'bg-teal-500 text-white' : 'text-gray-400 hover:text-gray-200'"
                         class="px-3 py-1 rounded-md text-[10px] font-bold transition-all">Full Cycle</button>
                 </div>
+                <button v-if="selectedNodeNames.length" @click="clearSelection"
+                    class="px-2.5 py-1 rounded-md text-[10px] font-bold border border-rose-400/30 text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 transition">
+                    Clear Selection
+                </button>
                 <div class="meta-pill">Selected: <span class="meta-strong">{{ selectedNodeNames.length ?
                     selectedNodeNames.join(' & ') : 'Global' }}</span>
                 </div>
@@ -158,6 +169,7 @@ watch(
         <div class="topology-body">
             <div class="topology-canvas">
                 <div ref="chartRef" class="w-full h-full"></div>
+                <div class="canvas-hint">悬停查看标签 • 点击节点选择</div>
             </div>
 
             <div class="topology-side">
@@ -170,6 +182,9 @@ watch(
                         </div>
                     </div>
                     <div class="side-list overflow-y-auto pr-1 custom-scrollbar flex-1">
+                        <div v-if="deviceNodes.length === 0" class="empty-state">
+                            暂无设备数据
+                        </div>
                         <button v-for="node in deviceNodes" :key="node.name" @click="selectNode(node.name)"
                             class="side-item mb-1.5" :class="selectedNodeNames.includes(node.name) ? 'is-active' : ''">
                             <div class="item-header">
@@ -286,6 +301,32 @@ watch(
     overflow: hidden;
 }
 
+.topology-canvas::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.canvas-hint {
+    position: absolute;
+    right: 12px;
+    bottom: 10px;
+    padding: 4px 8px;
+    font-size: 10px;
+    color: #94a3b8;
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: 2;
+}
+
 .topology-side {
     display: flex;
     flex-direction: column;
@@ -355,6 +396,16 @@ watch(
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.empty-state {
+    font-size: 12px;
+    color: #64748b;
+    background: rgba(2, 6, 23, 0.4);
+    border: 1px dashed rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+    padding: 16px 12px;
+    text-align: center;
 }
 
 .side-item {

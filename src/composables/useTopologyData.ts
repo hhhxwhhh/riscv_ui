@@ -1,7 +1,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import type { DeviceInfo, NodeData } from '../components/DeviceTopology.types';
-import { calculatePositions, getTopologyCenter, getCenterY } from '../components/DeviceTopology.helpers';
+import { calculateTopologyLayout } from '../components/DeviceTopology.helpers';
 
 export function useTopologyData(
     devicesSource: Ref<DeviceInfo[] | undefined>,
@@ -64,15 +64,15 @@ export function useTopologyData(
             });
 
         // determine chart size if provided
-        const chartSize = chartSizeRef && chartSizeRef.value ? chartSizeRef.value : undefined;
-        const positions = calculatePositions(deviceList.length, chartSize?.width, chartSize?.height);
+        const w = chartSizeRef?.value?.width || ((typeof window !== 'undefined') ? window.innerWidth : 1200);
+        const h = chartSizeRef?.value?.height || ((typeof window !== 'undefined') ? window.innerHeight : 800);
+        
+        const layout = calculateTopologyLayout(w, h, deviceList.length);
 
-        // compute centerY consistent with positions
-        const centerY = chartSize ? getCenterY(chartSize.height, deviceList.length) : getTopologyCenter().centerY;
         const gateway = {
             name: gatewayName,
-            x: chartSize ? Math.floor((chartSize.width) * 0.5) : 400,
-            y: centerY, // 跟动态 centerY 保持一致
+            x: layout.gateway.x,
+            y: layout.gateway.y,
             value: '192.168.1.1',
             category: 'gateway',
             isBlinking: previousState.get(gatewayName)?.isBlinking || false,
@@ -82,7 +82,7 @@ export function useTopologyData(
         };
 
         const newDeviceNodes = deviceList.map((device, index) => {
-            const pos = positions[index] || { x: 0, y: 0 };
+            const pos = layout.nodes[index] || { x: 0, y: 0 };
             const prevState = previousState.get(device.name);
             // Default to 0 throughput if no previous state, avoid random fake data
             const defaultTput = 0; 
@@ -230,6 +230,16 @@ export function useTopologyData(
         buildNodesFromDevices(newDevices);
         triggerRender();
     }, { deep: true, immediate: true });
+
+    // Respond to chart size changes for recalculating layout
+    if (chartSizeRef) {
+        watch(chartSizeRef, (newSize) => {
+            if (newSize) {
+                buildNodesFromDevices(devicesSource.value);
+                triggerRender();
+            }
+        });
+    }
 
     watch(modelValue, (next) => {
         if (!next) return;

@@ -20,59 +20,84 @@ export const getGatewayColor = (throughput: number) => {
     return `rgb(${red}, ${green}, ${blue})`;
 };
 
-const getLayoutMetrics = (width: number, height: number, count: number) => {
-    const isHighCount = count > 30;
-    const topOffset = 90;   // leave space for title/toolbar
-    const bottomOffset = 70; // leave space for footer/labels
-    const usableHeight = Math.max(200, height - topOffset - bottomOffset);
+/**
+ * Centrally manages the layout logic for the topology
+ */
+export const calculateTopologyLayout = (width: number, height: number, nodeCount: number) => {
+    // 1. Definition of Safe Area
+    // The left panel (System Telemetry) takes up ~240px width.
+    // We visually shift the center to the right to avoid overlap.
+    
+    // Heuristic: If screen is wide enough, assume left panel is present and active.
+    const LEFT_PANEL_WIDTH = 280; 
+    const hasLeftPanel = width > 900; 
+    
+    const usableXStart = hasLeftPanel ? LEFT_PANEL_WIDTH : 0;
+    const usableWidth = width - usableXStart;
+    
+    const centerX = usableXStart + (usableWidth / 2);
+    const centerY = height / 2;
 
-    const centerX = Math.floor(width * 0.5);
-    const centerY = Math.floor(topOffset + usableHeight * (isHighCount ? 0.52 : 0.62));
+    // 2. Gateway Position
+    const gatewayPos = { x: centerX, y: centerY };
 
-    const radiusX = Math.floor(width * 0.36);
-    const radiusY = Math.floor(usableHeight * (isHighCount ? 0.44 : 0.5));
+    // 3. Radius Calculation (Adaptive)
+    const minDim = Math.min(usableWidth, height);
+    let radius = (minDim / 2) - 90;
+    radius = Math.max(160, Math.min(radius, 520));
 
-    return { centerX, centerY, radiusX, radiusY };
+    // 4. Multi-ring Node Distribution for dense graphs
+    // Desired min arc spacing (approx label width + gap)
+    const minArcSpacing = 110;
+    const maxPerRing = Math.max(10, Math.floor((2 * Math.PI * radius) / minArcSpacing));
+    const ringCount = Math.max(1, Math.ceil(nodeCount / maxPerRing));
+    const ringStep = Math.min(110, Math.max(70, radius / (ringCount + 1)));
+
+    const rings = Array.from({ length: ringCount }, (_, i) => {
+        const r = radius - (ringCount - 1 - i) * ringStep;
+        const rClamped = Math.max(120, r);
+        const rx = rClamped * (usableWidth > height * 1.2 ? 1.25 : 1.0);
+        const ry = rClamped;
+        return { rx, ry };
+    });
+
+    let nodeIndex = 0;
+    const nodes = [] as { x: number; y: number }[];
+    for (let ringIndex = 0; ringIndex < ringCount; ringIndex += 1) {
+        const remaining = nodeCount - nodeIndex;
+        const capacity = Math.min(maxPerRing, remaining);
+        const { rx, ry } = rings[ringIndex];
+        const offset = (ringIndex * 15 * Math.PI) / 180; // stagger rings
+
+        for (let i = 0; i < capacity; i += 1) {
+            const angle = (i / capacity) * 2 * Math.PI - (Math.PI / 2) + offset;
+            nodes.push({
+                x: centerX + Math.cos(angle) * rx,
+                y: centerY + Math.sin(angle) * ry
+            });
+            nodeIndex += 1;
+        }
+    }
+
+    return {
+        gateway: gatewayPos,
+        nodes: nodes,
+        radius: radius
+    };
 };
 
-export const getCenterY = (height: number, count: number) => {
-    const width = (typeof window !== 'undefined') ? window.innerWidth : 1200;
-    return getLayoutMetrics(width, height, count).centerY;
+// --- Adapters for backward compatibility (or simplified usage) ---
+
+export const getCenterY = (height: number, _count: number) => {
+    return height / 2;
 }
 
 export const getTopologyCenter = () => {
-    const width = (typeof window !== 'undefined') ? window.innerWidth : 1200;
-    const height = (typeof window !== 'undefined') ? window.innerHeight : 800;
-
-    return getLayoutMetrics(width, height, 0);
+    return { centerX: window.innerWidth / 2, centerY: window.innerHeight / 2 }; 
 }
 
 export const calculatePositions = (count: number, width?: number, height?: number) => {
-    let centerX: number, centerY: number, radiusX: number, radiusY: number;
-    const isHighCount = count > 30;
-
-    if (width && height) {
-        const metrics = getLayoutMetrics(width, height, count);
-        centerX = metrics.centerX;
-        centerY = metrics.centerY;
-        radiusX = metrics.radiusX;
-        radiusY = metrics.radiusY;
-    } else {
-        const c = getTopologyCenter();
-        centerX = c.centerX;
-        centerY = height ? getCenterY(height, count) : c.centerY;
-        radiusX = c.radiusX; radiusY = c.radiusY;
-    }
-
-    // Generate dozens of points in a responsive arc or circle
-    return Array.from({ length: count }, (_, i) => {
-        const angle = isHighCount
-            ? (i / count) * 2 * Math.PI
-            : (i / (count - 1 || 1)) * Math.PI - Math.PI;
-
-        return {
-            x: centerX + Math.cos(angle) * (isHighCount ? radiusX * 0.85 : radiusX),
-            y: centerY + Math.sin(angle) * (isHighCount ? radiusY * 0.85 : radiusY)
-        };
-    });
+    const w = width || ((typeof window !== 'undefined') ? window.innerWidth : 1200);
+    const h = height || ((typeof window !== 'undefined') ? window.innerHeight : 800);
+    return calculateTopologyLayout(w, h, count).nodes;
 }
