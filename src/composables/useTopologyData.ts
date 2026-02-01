@@ -8,13 +8,9 @@ export function useTopologyData(
     currentStageId: Ref<string>,
     modelValue: Ref<string | string[] | undefined>,
     emit: (event: any, ...args: any[]) => void,
-    triggerRender: () => void
+    triggerRender: () => void,
+    chartSizeRef?: Ref<{ width: number; height: number } | null | undefined>
 ) {
-    // Optional: a ref with chart size { width, height } can be passed by the caller
-    // to ensure positions are calculated relative to the actual chart container.
-    // Keep backward compatibility by checking for an extra argument.
-    const extraArg = arguments[5] as Ref<{ width: number; height: number } | undefined> | undefined;
-    const chartSizeRef = extraArg;
     const nodes = ref<NodeData[]>([]);
     
     // Normalize initial selection

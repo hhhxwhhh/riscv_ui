@@ -20,24 +20,31 @@ export const getGatewayColor = (throughput: number) => {
     return `rgb(${red}, ${green}, ${blue})`;
 };
 
-export const getCenterY = (height: number, count: number) => {
+const getLayoutMetrics = (width: number, height: number, count: number) => {
     const isHighCount = count > 30;
-    return Math.floor(height * (isHighCount ? 0.5 : 0.65));
+    const topOffset = 90;   // leave space for title/toolbar
+    const bottomOffset = 70; // leave space for footer/labels
+    const usableHeight = Math.max(200, height - topOffset - bottomOffset);
+
+    const centerX = Math.floor(width * 0.5);
+    const centerY = Math.floor(topOffset + usableHeight * (isHighCount ? 0.52 : 0.62));
+
+    const radiusX = Math.floor(width * 0.36);
+    const radiusY = Math.floor(usableHeight * (isHighCount ? 0.44 : 0.5));
+
+    return { centerX, centerY, radiusX, radiusY };
+};
+
+export const getCenterY = (height: number, count: number) => {
+    const width = (typeof window !== 'undefined') ? window.innerWidth : 1200;
+    return getLayoutMetrics(width, height, count).centerY;
 }
 
 export const getTopologyCenter = () => {
     const width = (typeof window !== 'undefined') ? window.innerWidth : 1200;
     const height = (typeof window !== 'undefined') ? window.innerHeight : 800;
 
-    const centerX = Math.floor(width * 0.5);
-    // Use a default count of 0 for the generic center calculation
-    const centerY = getCenterY(height, 0); 
-
-    // radii scale with viewport
-    const radiusX = Math.floor(width * 0.38);
-    const radiusY = Math.floor(height * 0.35);
-
-    return { centerX, centerY, radiusX, radiusY };
+    return getLayoutMetrics(width, height, 0);
 }
 
 export const calculatePositions = (count: number, width?: number, height?: number) => {
@@ -45,13 +52,14 @@ export const calculatePositions = (count: number, width?: number, height?: numbe
     const isHighCount = count > 30;
 
     if (width && height) {
-        centerX = Math.floor(width * 0.5);
-        centerY = getCenterY(height, count);
-        radiusX = Math.floor(width * 0.38);
-        radiusY = Math.floor(height * 0.35);
+        const metrics = getLayoutMetrics(width, height, count);
+        centerX = metrics.centerX;
+        centerY = metrics.centerY;
+        radiusX = metrics.radiusX;
+        radiusY = metrics.radiusY;
     } else {
         const c = getTopologyCenter();
-        centerX = c.centerX; 
+        centerX = c.centerX;
         centerY = height ? getCenterY(height, count) : c.centerY;
         radiusX = c.radiusX; radiusY = c.radiusY;
     }
