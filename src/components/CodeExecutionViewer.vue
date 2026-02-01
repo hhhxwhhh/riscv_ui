@@ -9,6 +9,8 @@ const props = defineProps({
 
 const showFullCode = ref(false);
 const activeCodeTab = ref<'c' | 'asm'>('asm');
+const codeSearch = ref('');
+const copied = ref(false);
 
 // 自定义指令类型映射（加密、解密、哈希、认证）
 const customTypes = [
@@ -69,6 +71,49 @@ const handleCustomHover = (cIdx: number | null) => {
     hoveredCustomIdx.value = cIdx;
     // 不再在这里设置 hoveredStandardIdx，而是通过 computed 样式判断
 };
+
+const activeCode = computed(() => {
+    return activeCodeTab.value === 'c' ? props.stage.fullCode.c : props.stage.fullCode.asm;
+});
+
+const activeCodeLines = computed(() => activeCode.value.split('\n'));
+
+const escapeHtml = (input: string) => {
+    return input
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+};
+
+const escapeRegExp = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const highlightedCode = computed(() => {
+    const raw = activeCode.value || '';
+    const term = codeSearch.value.trim();
+    if (!term) return escapeHtml(raw);
+    const regex = new RegExp(escapeRegExp(term), 'gi');
+    return escapeHtml(raw).replace(regex, (match) => `<mark class="code-mark">${match}</mark>`);
+});
+
+const matchCount = computed(() => {
+    const term = codeSearch.value.trim();
+    if (!term) return 0;
+    const regex = new RegExp(escapeRegExp(term), 'gi');
+    return (activeCode.value.match(regex) || []).length;
+});
+
+const copyCode = async () => {
+    try {
+        await navigator.clipboard.writeText(activeCode.value);
+        copied.value = true;
+        window.setTimeout(() => { copied.value = false; }, 1200);
+    } catch (err) {
+        console.error('Copy failed', err);
+    }
+};
+
 </script>
 
 <template>
@@ -116,17 +161,24 @@ const handleCustomHover = (cIdx: number | null) => {
                             <div class="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
                                 <button @click="activeCodeTab = 'c'"
                                     :class="activeCodeTab === 'c' ? 'bg-rose-500/20 text-rose-400' : 'text-gray-400 hover:text-gray-200'"
-                                    class="px-4 py-1 rounded-md text-sm font-medium transition-all">Standard C</button>
+                                    class="toolbar-btn">Standard C</button>
                                 <button @click="activeCodeTab = 'asm'"
                                     :class="activeCodeTab === 'asm' ? 'bg-teal-500/20 text-teal-400' : 'text-gray-400 hover:text-gray-200'"
-                                    class="px-4 py-1 rounded-md text-sm font-medium transition-all">RISC-V ASM</button>
+                                    class="toolbar-btn">RISC-V ASM</button>
                             </div>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <div class="text-[10px] text-gray-500 font-mono italic">READ_ONLY_BUFFER: 0x{{
-                                (Math.random() * 0xFFFFFF).toString(16) }}</div>
-                            <button @click="showFullCode = false"
-                                class="text-gray-400 hover:text-white px-4 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md transition-colors text-sm">Close
+                        <div class="flex items-center gap-2 flex-nowrap">
+                            <div
+                                class="flex items-center gap-2 bg-slate-800/70 border border-slate-700 rounded-md px-2 py-1">
+                                <span class="text-[10px] text-slate-400">Search</span>
+                                <input v-model="codeSearch" type="text" placeholder="keyword"
+                                    class="bg-transparent text-[11px] text-slate-200 outline-none w-28" />
+                                <span class="text-[10px] text-slate-500">{{ matchCount }}</span>
+                            </div>
+                            <button @click="copyCode" class="toolbar-btn">
+                                {{ copied ? 'Copied' : 'Copy' }}
+                            </button>
+                            <button @click="showFullCode = false" class="toolbar-btn">Close
                                 Terminal</button>
                         </div>
                     </div>
@@ -143,17 +195,14 @@ const handleCustomHover = (cIdx: number | null) => {
                                 {{ activeCodeTab === 'c' ? 'legacy_implementation.c' : 'accelerated_kernel.s' }}
                             </div>
                         </div>
-                        <div class="flex-1 overflow-y-auto p-4 font-mono text-sm leading-relaxed custom-scrollbar">
+                        <div class="flex-1 overflow-y-auto p-4 font-mono leading-relaxed custom-scrollbar">
                             <div class="flex gap-4">
                                 <div
                                     class="flex flex-col text-slate-700 text-right select-none opacity-50 border-r border-slate-800 pr-4 min-w-[3rem]">
-                                    <div v-for="n in (activeCodeTab === 'c' ? props.stage.fullCode.c.split('\n').length : props.stage.fullCode.asm.split('\n').length)"
-                                        :key="n">{{ n }}</div>
+                                    <div v-for="n in activeCodeLines.length" :key="n">{{ n }}</div>
                                 </div>
-                                <pre v-if="activeCodeTab === 'c'"
-                                    class="text-slate-300 w-full whitespace-pre-wrap selection:bg-rose-500/30">{{ props.stage.fullCode.c }}</pre>
-                                <pre v-else
-                                    class="text-slate-300 w-full whitespace-pre-wrap selection:bg-teal-500/30">{{ props.stage.fullCode.asm }}</pre>
+                                <pre v-html="highlightedCode"
+                                    class="whitespace-pre-wrap text-slate-300 w-full selection:bg-teal-500/30"></pre>
                             </div>
                         </div>
                         <div v-if="activeCodeTab === 'asm'"
@@ -326,6 +375,30 @@ const handleCustomHover = (cIdx: number | null) => {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(148, 163, 184, 0.4);
+}
+
+.code-mark {
+    background: rgba(56, 189, 248, 0.25);
+    color: #e2e8f0;
+    padding: 0 1px;
+    border-radius: 2px;
+}
+
+.toolbar-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(51, 65, 85, 1);
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.8);
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    line-height: 1.2;
+}
+
+.toolbar-btn:hover {
+    background: rgba(30, 41, 59, 0.9);
+    border-color: rgba(71, 85, 105, 1);
+    color: #f8fafc;
 }
 
 /* Simulate phosphor glow on highlted instructions */
