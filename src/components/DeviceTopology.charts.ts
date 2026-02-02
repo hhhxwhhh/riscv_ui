@@ -474,8 +474,29 @@ export const buildChartOption = (
                     </div>`;
                 }
                 if (params.componentType === 'series') {
-                     // Simple tooltip mainly for node
-                     return `<div class="px-3 py-2 font-mono text-xs font-bold">${params.name}</div>`;  
+                    const node = params?.data?.category
+                        ? params.data
+                        : nodes.find(n => n.name === params.name);
+
+                    if (node) {
+                        const isGateway = node.category === 'gateway' || node.name.includes('Gateway');
+                        const ctx = getStageContext(node.stageId || 'AUTH');
+                        const isActive = node.isBlinking || node.throughput > 0;
+                        const tput = isGateway ? displayGatewayThroughput : node.throughput;
+                        const statusText = isActive ? 'Active' : 'Idle';
+                        const statusColor = isActive ? '#34d399' : '#94a3b8';
+
+                        return `
+                        <div class="px-3 py-2 font-mono text-xs">
+                            <div class="border-b border-gray-600 pb-1 mb-2 font-bold text-sky-400">${node.name}</div>
+                            <div>IP: ${node.value}</div>
+                            <div>Stage: <span style="color:${ctx.color}">${ctx.text}</span></div>
+                            <div>Status: <span style="color:${statusColor}">${statusText}</span></div>
+                            <div>Throughput: ${Math.round(tput || 0)} Mbps</div>
+                        </div>`;
+                    }
+
+                    return `<div class="px-3 py-2 font-mono text-xs font-bold">${params.name}</div>`;  
                 }
                 return '';
             }
