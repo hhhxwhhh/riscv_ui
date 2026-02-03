@@ -28,10 +28,12 @@ const calculateFlowLines = (
         const isSelected = selectedNames.includes(node.name);
         if (!isGlobal && !isSelected) return;
 
+        const isActive = node.isBlinking || node.throughput > 0;
         let stagesToShow: string[] = [];
         if (viewMode === 'all' || isRelayMode) {
             stagesToShow = (!isGlobal) ? stageIds : [node.stageId];
         } else {
+            // Stage 模式下，核心关注点始终是当前顶部的全局阶段
             stagesToShow = [currentStageId];
         }
 
@@ -39,8 +41,9 @@ const calculateFlowLines = (
             const gatewayNode = nodes.find(n => n.category === 'gateway');
             if (!gatewayNode) return;
 
-            const isActive = node.isBlinking || node.throughput > 0;
-            if (isActive && node.stageId !== sid) return;
+            // 过滤逻辑：在单阶段视图模式下，如果节点活跃但活跃阶段不匹配，则不显示流量线
+            const isLogicalMatch = (viewMode === 'stage' && isActive) ? (node.stageId === sid) : true;
+            if (!isLogicalMatch) return;
 
             let source = node.name;
             let target = gatewayNode.name;
@@ -341,15 +344,17 @@ const buildNodeLayer = (
             const isSelected = selectedNames.includes(node.name);
             const isActive = node.isBlinking || node.throughput > 0;
 
-            const sid = (viewMode === 'all' || isActive) ? node.stageId : (isSelected ? currentStageId : node.stageId);
+            // 修复点线颜色同步与全局阶段过滤
+            // 逻辑：如果活跃则显示其实际阶段，否则显示当前顶部的全局阶段
+            const sid = isActive ? node.stageId : currentStageId;
             const ctx = getStageContext(sid);
             
             let color = isGateway ? getGatewayColor(gatewayThroughput) : (isSelected || isGlobal ? ctx.color : THEME.textMuted);
             let shadowBlur = isSelected ? 30 : 10;
             
-            if (node.isBlinking && !isGateway) {
-                color = THEME.warning;
-                shadowBlur = 35;
+            if (isActive && !isGateway) {
+                color = ctx.color;
+                shadowBlur = 40;
             }
 
             // Dim outline for inactive nodes in dense mode
