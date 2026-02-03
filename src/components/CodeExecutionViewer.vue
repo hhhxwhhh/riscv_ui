@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Cpu, FileCode } from 'lucide-vue-next';
 import type { StageInfo } from '../api/stages';
 
@@ -14,14 +14,18 @@ const copied = ref(false);
 
 // 自定义指令类型映射（加密、解密、哈希、认证）
 const customTypes = [
-    { key: 'ENCRYPT', label: '加密指令' },
-    { key: 'DECRYPT', label: '解密指令' },
-    { key: 'HASH', label: '哈希指令' },
-    { key: 'AUTH', label: '认证指令' }
+    { key: 'AUTH', label: 'SM2 身份认证' },
+    { key: 'ENCRYPT', label: 'SM4 数据加密' },
+    { key: 'DECRYPT', label: 'SM4 数据解密' },
+    { key: 'HASH', label: 'SM3 完整性哈希' }
 ];
 
-// 当前选中的类型
-const selectedType = ref('ENCRYPT');
+// 默认选中当前的 props.stage.id
+const selectedType = ref(props.stage.id);
+
+watch(() => props.stage.id, (newId: string) => {
+    selectedType.value = newId;
+});
 
 // 获取当前类型对应的stage
 import { STAGES } from '../api/stages';
@@ -131,7 +135,14 @@ const copyCode = async () => {
                     </div>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
+                <div class="flex bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60">
+                    <button v-for="type in customTypes" :key="type.key" @click="selectedType = type.key"
+                        :class="selectedType === type.key ? 'bg-sky-500 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-3 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap">
+                        {{ type.label }}
+                    </button>
+                </div>
                 <button @click="showFullCode = true"
                     class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
                     <FileCode class="w-4 h-4" />
@@ -198,19 +209,32 @@ const copyCode = async () => {
                         <div class="flex-1 overflow-y-auto p-4 font-mono leading-relaxed custom-scrollbar">
                             <div class="flex gap-4">
                                 <div
-                                    class="flex flex-col text-slate-700 text-right select-none opacity-50 border-r border-slate-800 pr-4 min-w-[3rem]">
-                                    <div v-for="n in activeCodeLines.length" :key="n">{{ n }}</div>
+                                    class="flex flex-col text-slate-600 text-right select-none text-[11px] border-r border-slate-800 pr-3 sticky left-0 bg-slate-900/40">
+                                    <div v-for="n in activeCodeLines.length" :key="n" class="h-6">{{ n }}</div>
                                 </div>
-                                <pre v-html="highlightedCode"
-                                    class="whitespace-pre-wrap text-slate-300 w-full selection:bg-teal-500/30"></pre>
+                                <div class="flex-1 text-[13px] relative">
+                                    <pre class="whitespace-pre m-0 selection:bg-teal-500/30 text-slate-300"
+                                        v-html="highlightedCode"></pre>
+
+                                    <div v-if="matchCount > 0"
+                                        class="absolute top-0 right-0 bg-sky-500/10 border border-sky-400/20 px-2 py-1 rounded text-[10px] text-sky-300">
+                                        Found {{ matchCount }} occurrences
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div v-if="activeCodeTab === 'asm'"
-                            class="absolute bottom-6 right-6 px-4 py-2 bg-teal-500/10 border border-teal-500/30 rounded backdrop-blur-sm shadow-xl">
-                            <div class="text-[10px] text-teal-500 mb-1">ACCELERATION STATUS</div>
-                            <div class="text-xl font-bold text-teal-400 flex items-baseline gap-1">
-                                {{ (props.stage.metrics.stdLatency / props.stage.metrics.latency).toFixed(1) }}<span
-                                    class="text-xs">x FASTER</span>
+                        <div
+                            class="px-4 py-2 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between text-[10px]">
+                            <div class="flex items-center gap-4 text-slate-400">
+                                <span class="flex items-center gap-1"><span
+                                        class="w-1.5 h-1.5 rounded-full bg-teal-400"></span> RISC-V Zk Extension
+                                    Active</span>
+                                <span class="flex items-center gap-1"><span
+                                        class="w-1.5 h-1.5 rounded-full bg-violet-400"></span> SM Crypto Hardware Core
+                                    V2.0</span>
+                            </div>
+                            <div class="text-slate-500">
+                                Lines: {{ activeCodeLines.length }} | Optimization: Level 3 (Aggressive)
                             </div>
                         </div>
                     </div>

@@ -179,10 +179,10 @@ onMounted(() => {
           <div class="flex items-center gap-3">
             <div
               class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-md text-sm">
-              R</div>
+              W7</div>
             <div>
-              <h1 class="text-lg font-bold tracking-wide">RISC-V 全架构安全网关演示系统</h1>
-              <div class="subtle-text text-[11px]">面向物联网的全生命周期加解密与身份认证监控</div>
+              <h1 class="text-lg font-bold tracking-wide">RISC-V Wi-Fi 7 全架构安全网关演示系统</h1>
+              <div class="subtle-text text-[11px]">面向物联网 802.11be 标准的全生命周期加解密监控</div>
             </div>
           </div>
           <div class="flex items-center gap-2">

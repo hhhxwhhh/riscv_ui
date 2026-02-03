@@ -143,8 +143,8 @@ watch(
     <div class="topology-shell">
         <div class="topology-header">
             <div>
-                <div class="topology-title">Network Topology</div>
-                <div class="topology-subtitle">实时拓扑与流量脉冲</div>
+                <div class="topology-title text-sky-400">Wi-Fi 7 安全网关实时拓扑</div>
+                <div class="topology-subtitle">分布式物联网终端与 RISC-V 核心交换监控</div>
             </div>
             <div class="topology-meta">
                 <div class="flex bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60 mr-2">
@@ -186,9 +186,14 @@ watch(
                             暂无设备数据
                         </div>
                         <button v-for="node in deviceNodes" :key="node.name" @click="selectNode(node.name)"
-                            class="side-item mb-1.5" :class="selectedNodeNames.includes(node.name) ? 'is-active' : ''">
+                            class="side-item mb-1.5 transition-all duration-300"
+                            :class="selectedNodeNames.includes(node.name) ? 'is-active ring-1 ring-sky-500/50' : ''">
                             <div class="item-header">
-                                <span class="item-name">{{ node.name }}</span>
+                                <span class="item-name flex items-center gap-1.5">
+                                    <span v-if="node.throughput > 100"
+                                        class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    {{ node.name }}
+                                </span>
                                 <span class="status-badge" :style="{
                                     color: getStageContext(node.stageId).color,
                                     borderColor: getStageContext(node.stageId).color + '40',
@@ -197,35 +202,49 @@ watch(
                                     {{ getStageContext(node.stageId).text }}
                                 </span>
                             </div>
-                            <div class="flex items-center justify-between pointer-events-none">
-                                <span class="side-ip">{{ node.value }}</span>
-                                <span class="text-[9px] text-sky-400 font-bold" v-if="node.throughput > 100">
-                                    {{ Math.round(node.throughput) }} Mbps
-                                </span>
-                                <span class="text-[9px] text-gray-500 font-mono" v-else>STABLE</span>
+                            <div class="flex items-center justify-between pointer-events-none mt-1">
+                                <span class="side-ip opacity-60">{{ node.value }}</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[9px] text-sky-400 font-bold" v-if="node.throughput > 0">
+                                        {{ Math.round(node.throughput) }} Mbps
+                                    </span>
+                                    <span class="text-[9px] text-gray-500 font-mono" v-else>IDLE</span>
+                                </div>
                             </div>
                         </button>
                     </div>
                 </div>
 
                 <div class="side-card">
-                    <div class="side-title">Security State Legend</div>
-                    <div class="space-y-2">
-                        <div class="legend-row">
+                    <div class="side-title">安全域状态图例</div>
+                    <div class="grid grid-cols-1 gap-3">
+                        <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" :style="{ background: theme.accent }"></span>
-                            <span class="text-[11px]">SM2 Identity Authentication</span>
+                            <div class="flex flex-col">
+                                <span class="text-[11px] font-bold text-gray-200">SM2 身份双向认证</span>
+                                <span class="text-[9px] text-gray-500">设备接入合法性校验周期</span>
+                            </div>
                         </div>
-                        <div class="legend-row">
+                        <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" :style="{ background: theme.success }"></span>
-                            <span class="text-[11px]">SM4 Secure Communication</span>
+                            <div class="flex flex-col">
+                                <span class="text-[11px] font-bold text-gray-200">SM4 业务流加密</span>
+                                <span class="text-[9px] text-gray-500">端到端数据负载强加密</span>
+                            </div>
                         </div>
-                        <div class="legend-row">
+                        <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" style="background: #f472b6"></span>
-                            <span class="text-[11px]">Internal Hardware Decryption</span>
+                            <div class="flex flex-col">
+                                <span class="text-[11px] font-bold text-gray-200">网关硬件内核解密</span>
+                                <span class="text-[9px] text-gray-500">RISC-V 专用指令集并行处理</span>
+                            </div>
                         </div>
-                        <div class="legend-row">
+                        <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" :style="{ background: theme.warning }"></span>
-                            <span class="text-[11px]">SM3 Integrity Protection</span>
+                            <div class="flex flex-col">
+                                <span class="text-[11px] font-bold text-gray-200">SM3 完整性校验</span>
+                                <span class="text-[9px] text-gray-500">数据防篡改及链路状态同步</span>
+                            </div>
                         </div>
                     </div>
                 </div>

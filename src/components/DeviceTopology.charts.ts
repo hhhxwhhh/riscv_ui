@@ -72,17 +72,22 @@ const calculateFlowLines = (
 
             if (sPos && tPos) {
                 const tput = node.throughput || 100;
-                const activeOpacity = Math.max(0.7, Math.min(1, tput / 600));
+                // 更动态的不透明度：低流量时几乎透明，高流量时非常亮
+                const activeOpacity = Math.max(0.6, Math.min(1.0, tput / 800));
                 const flowOpacity = isActive ? activeOpacity : 0.05;
+                
                 const ctx = getStageContext(sid);
                 const stageLines = linesByStage[sid] || (linesByStage[sid] = []);
                 
+                // 线条粗细随流量变化：1.2 到 4.5 之间
+                const lineWidth = isActive ? Math.max(1.5, Math.min(4.5, 1.2 + (tput / 250))) : 1.2;
+
                 // Special "Internal Processing" Loop for Decrypt stage
                 if (sid === 'DECRYPT' && (isRelayMode || isSelected)) {
                     const gx = gatewayNode.x, gy = gatewayNode.y; 
                     stageLines.push({
                         coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
-                        lineStyle: { width: 2, opacity: flowOpacity, color: ctx.color },
+                        lineStyle: { width: lineWidth, opacity: flowOpacity, color: ctx.color },
                         sourceName: 'Gateway Engine', targetName: 'HW Accelerator',
                         stageName: ctx.text, throughput: tput
                     });
@@ -91,7 +96,7 @@ const calculateFlowLines = (
                     stageLines.push({
                         coords: [sPos, tPos],
                         lineStyle: {
-                            width: 1.8,
+                            width: lineWidth,
                             curveness: isRelayMode ? (node.name === nodeB ? -0.25 : 0.25) : curve,
                             opacity: flowOpacity,
                             color: ctx.color
@@ -114,12 +119,12 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
     if (!gateway || isLargeMode) return [];
 
     const maxTput = 5000;
-    const intensity = Math.min(1, throughput / maxTput);
+    const intensity = Math.min(1.2, throughput / maxTput); // Allow slight over-intensity for visual impact
     const color = getGatewayColor(throughput);
     
     // Extract RGB for rgba construction
     const rgb = color.match(/\d+/g)?.map(Number) || [255, 100, 100];
-    const alpha = 0.1 + 0.2 * intensity;
+    const alpha = 0.15 + 0.25 * intensity;
 
     return [
         {
@@ -128,9 +133,18 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             coordinateSystem: 'cartesian2d',
             silent: true,
             data: [{ value: [gateway.x, gateway.y] }],
-            symbolSize: 70 + 25 * intensity,
-            rippleEffect: { brushType: 'stroke', scale: 2.0, period: 3.5 - 1.5 * intensity, color: color },
-            itemStyle: { color: `rgba(${rgb[0]}, ${rgb[1]}, 133, ${alpha})`, shadowBlur: 20, shadowColor: color },
+            symbolSize: 80 + 40 * intensity,
+            rippleEffect: { 
+                brushType: 'stroke', 
+                scale: 2.2 + 0.8 * intensity, 
+                period: Math.max(1.5, 4 - 2.5 * intensity), 
+                color: color 
+            },
+            itemStyle: { 
+                color: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`, 
+                shadowBlur: 30 + 30 * intensity, 
+                shadowColor: color 
+            },
             z: 0
         },
         {
@@ -139,9 +153,19 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             coordinateSystem: 'cartesian2d',
             silent: true,
             data: [{ value: [gateway.x, gateway.y] }],
-            symbolSize: 95 + 35 * intensity,
-            rippleEffect: { brushType: 'stroke', scale: 2.8, period: 5 - 2 * intensity, color: color },
-            itemStyle: { color: 'transparent', borderColor: color, borderWidth: 1, opacity: 0.15 + (0.15 * intensity) },
+            symbolSize: 110 + 50 * intensity,
+            rippleEffect: { 
+                brushType: 'stroke', 
+                scale: 3.2 + 1.2 * intensity, 
+                period: Math.max(2, 6 - 3 * intensity), 
+                color: color 
+            },
+            itemStyle: { 
+                color: 'transparent', 
+                borderColor: color, 
+                borderWidth: 1.5, 
+                opacity: 0.2 + (0.2 * intensity) 
+            },
             z: 0
         }
     ];
@@ -180,6 +204,8 @@ const buildFlowLayer = (
         }
         
         const period = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
+        const symbolSize = isGlobal ? Math.max(4, Math.min(8, 3 + (avgTput / 300))) : Math.max(6, Math.min(12, 5 + (avgTput / 200)));
+        const trailLength = Math.max(0.3, Math.min(0.8, 0.4 + (avgTput / 1200)));
 
         series.push({
             type: 'lines',
@@ -188,9 +214,9 @@ const buildFlowLayer = (
             effect: {
                 show: true,
                 period: period,
-                trailLength: 0.5,
+                trailLength: trailLength,
                 symbol: 'arrow',
-                symbolSize: isGlobal ? 5 : 7,
+                symbolSize: symbolSize,
                 color: ctx.color
             },
             lineStyle: {
