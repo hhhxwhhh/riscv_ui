@@ -22,6 +22,8 @@ const stats = ref<PlatformStats>({
   uptime: '00:00:00'
 });
 
+const avgLatency = ref(1.2);
+
 const startTime = Date.now();
 
 const formatUptime = () => {
@@ -38,7 +40,18 @@ onMounted(() => {
     timer = setInterval(() => {
         stats.value.uptime = formatUptime();
         stats.value.totalDevices = props.devices.length;
-        stats.value.onlineDevices = props.devices.filter(d => d.status === 'online').length;
+        
+        const onlineOnes = props.devices.filter(d => d.status === 'online');
+        stats.value.onlineDevices = onlineOnes.length;
+        
+        // Dynamic aggregation of metrics
+        const totalTp = onlineOnes.reduce((sum, d) => sum + (d.metrics?.throughput || 0), 0);
+        stats.value.totalThroughput = totalTp;
+
+        const totalLat = onlineOnes.reduce((sum, d) => sum + (d.metrics?.latency || 0), 0);
+        if (onlineOnes.length > 0) {
+            avgLatency.value = Number((totalLat / onlineOnes.length).toFixed(2));
+        }
     }, 1000);
 });
 
@@ -70,19 +83,21 @@ onUnmounted(() => {
     <div class="bg-slate-800/40 border border-slate-700/50 p-2.5 rounded-lg backdrop-blur-sm">
         <div class="flex items-center gap-2 mb-1">
             <Database class="w-4 h-4 text-amber-400" />
-            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Platform Uptime</span>
+            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Aggregated Load</span>
         </div>
-        <div class="text-sm font-mono font-bold text-amber-200">{{ stats.uptime }}</div>
-        <div class="text-[9px] text-slate-400 mt-0.5">System Stability: 99.9%</div>
+        <div class="text-sm font-mono font-bold text-amber-200">
+            {{ Math.round(stats.totalThroughput) }} <span class="text-[10px] opacity-60">Mbps</span>
+        </div>
+        <div class="text-[9px] text-slate-400 mt-0.5">Avg Latency: {{ avgLatency }}ms</div>
     </div>
 
     <div class="bg-slate-800/40 border border-slate-700/50 p-2.5 rounded-lg backdrop-blur-sm">
         <div class="flex items-center gap-2 mb-1">
             <Shield class="w-4 h-4 text-purple-400" />
-            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Security Mode</span>
+            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Security State</span>
         </div>
-        <div class="text-sm font-bold text-purple-200">RISC-V P-Extension</div>
-        <div class="text-[9px] text-purple-400 mt-0.5">Instruction Protected</div>
+        <div class="text-sm font-bold text-purple-200">Active ({{ stats.onlineDevices }} Nodes)</div>
+        <div class="text-[9px] text-purple-400 mt-0.5">Uptime: {{ stats.uptime }}</div>
     </div>
   </div>
 </template>

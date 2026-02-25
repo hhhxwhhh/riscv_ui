@@ -458,10 +458,11 @@ export const buildChartOption = (
                 return '';
             }
         },
-        xAxis: { show: false, min: 0, max: width },
-        yAxis: { show: false, min: 0, max: height },
+        xAxis: { type: 'value', show: false, min: 0, max: width },
+        yAxis: { type: 'value', show: false, min: 0, max: height },
         grid: { top: 0, bottom: 0, left: 0, right: 0 },
         series: series,
-        backgroundColor: 'transparent'
+        backgroundColor: 'transparent',
+        animation: false // Disable global animation to prevent ghosting during rapid state changes
     };
 };

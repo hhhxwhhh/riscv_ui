@@ -7,7 +7,8 @@ import type { StageInfo } from '../api/stages';
 const props = defineProps({
     deviceName: { type: String, default: 'All Devices' },
     metrics: { type: Object as () => { throughput: number; latency: number; securityScore: number } | null, default: null },
-    stage: { type: Object as () => StageInfo, required: true }
+    stage: { type: Object as () => StageInfo, required: true },
+    devices: { type: Array as () => any[], default: () => [] }
 });
 
 const chartRef = ref<HTMLElement | null>(null);
@@ -29,45 +30,61 @@ const theme = {
     grid: 'rgba(148, 163, 184, 0.1)'
 };
 
-// Simulate different performance profiles for devices
-const getDeviceData = (name: string, stage: StageInfo) => {
-    let multiplier = 1.0;
-    if (name.includes('Secure') || name.includes(' A') || name.includes(' C')) multiplier = 1.15;
-    if (name.includes('Node') || name.includes(' B') || name.includes(' D')) multiplier = 0.85;
+// Aggregate data for the whole group or specific device
+const getAggregatedData = (deviceName: string, stage: StageInfo, allDevices: any[]) => {
+    // If a specific device is selected, just use its data (from metrics prop or devices list)
+    if (deviceName && deviceName !== 'All Devices') {
+        const dev = allDevices.find(d => d.name === deviceName);
+        if (dev && dev.metrics) {
+            return {
+                standard: {
+                    throughput: stage.metrics.stdThroughput,
+                    latency: stage.metrics.stdLatency,
+                    score: stage.metrics.stdSecurityScore
+                },
+                custom: {
+                    throughput: dev.metrics.throughput,
+                    latency: dev.metrics.latency,
+                    score: dev.metrics.securityScore
+                },
+                speedup: (stage.metrics.stdLatency / dev.metrics.latency).toFixed(1)
+            };
+        }
+    }
 
-    const stdLatency = stage.metrics.stdLatency / multiplier;
-    const custLatency = stage.metrics.latency / multiplier;
+    // Otherwise, calculate averages for all devices currently in this stage
+    const devicesInStage = allDevices.filter(d => d.stageId === stage.id && d.metrics);
+    
+    if (devicesInStage.length === 0) {
+        // Fallback to baseline
+        return {
+            standard: { throughput: stage.metrics.stdThroughput, latency: stage.metrics.stdLatency, score: stage.metrics.stdSecurityScore },
+            custom: { throughput: stage.metrics.throughput, latency: stage.metrics.latency, score: stage.metrics.securityScore },
+            speedup: (stage.metrics.stdLatency / stage.metrics.latency).toFixed(1)
+        };
+    }
+
+    const avgTput = devicesInStage.reduce((sum, d) => sum + d.metrics!.throughput, 0) / devicesInStage.length;
+    const avgLat = devicesInStage.reduce((sum, d) => sum + d.metrics!.latency, 0) / devicesInStage.length;
+    const avgScore = devicesInStage.reduce((sum, d) => sum + d.metrics!.securityScore, 0) / devicesInStage.length;
 
     return {
         standard: {
-            throughput: stage.metrics.stdThroughput * multiplier,
-            latency: stdLatency,
+            throughput: stage.metrics.stdThroughput,
+            latency: stage.metrics.stdLatency,
             score: stage.metrics.stdSecurityScore
         },
         custom: {
-            throughput: stage.metrics.throughput * multiplier,
-            latency: custLatency,
-            score: stage.metrics.securityScore
+            throughput: avgTput,
+            latency: avgLat,
+            score: avgScore
         },
-        speedup: (stdLatency / custLatency).toFixed(1)
+        speedup: (stage.metrics.stdLatency / avgLat).toFixed(1)
     };
 };
 
 const updateChart = () => {
-    const data = props.metrics ? {
-        standard: {
-            throughput: props.stage.metrics.stdThroughput,
-            latency: props.stage.metrics.stdLatency,
-            score: props.stage.metrics.stdSecurityScore
-        },
-        custom: {
-            throughput: props.metrics.throughput,
-            latency: props.metrics.latency,
-            score: props.metrics.securityScore
-        },
-        speedup: (props.stage.metrics.stdLatency / props.metrics.latency).toFixed(1)
-    } : getDeviceData(props.deviceName, props.stage);
-
+    const data = getAggregatedData(props.deviceName, props.stage, props.devices);
     stats.value = data;
 
     if (!chartInstance) return;
@@ -87,7 +104,7 @@ watch(() => props.metrics, updateChart);
 watch(() => props.stage, updateChart);
 
 onMounted(() => {
-    stats.value = getDeviceData(props.deviceName, props.stage);
+    updateChart();
 
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');

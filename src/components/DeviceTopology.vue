@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted, watch, computed, toRef } from 'vue';
 import * as echarts from 'echarts';
-import 'echarts-gl'; // Import ECharts GL
 import { type StageInfo } from '../api/stages';
 import { type DeviceInfo, THEME } from './DeviceTopology.types';
 import gatewaySvgRaw from '../svgs/gateway.svg?raw';
@@ -41,13 +40,13 @@ let optionBuilder: ((selectedNames: string[]) => echarts.EChartsOption) | null =
 // Nodes handled by composable
 
 const scheduleRender = () => {
-    if (!chartInstance || !optionBuilder || renderQueued) return;
+    if (!chartInstance || !optionBuilder || renderQueued || !chartSize.value) return;
     renderQueued = true;
     requestAnimationFrame(() => {
         renderQueued = false;
         if (!chartInstance) return; // Note: isDisposed check handled by component unmount mostly
         try {
-            chartInstance.setOption(optionBuilder!(selectedNodeNames.value));
+            chartInstance.setOption(optionBuilder!(selectedNodeNames.value), { notMerge: true });
         } catch (err) {
             console.error('Error during ECharts render:', err);
         }
@@ -64,17 +63,46 @@ const clearSelection = () => {
     if (triggerRenderFn) triggerRenderFn();
 };
 
-onMounted(() => {
-    startDataListener();
+const handleResize = () => {
+    if (!chartRef.value || !chartInstance) return;
+    const width = chartRef.value.clientWidth;
+    const height = chartRef.value.clientHeight;
+    
+    // Only update and re-render if dimensions are valid and changed
+    if (width > 0 && height > 0) {
+        // If dimensions change significantly, clear the previous instance to avoid GL ghosts
+        if (chartSize.value && (Math.abs(chartSize.value.width - width) > 10 || Math.abs(chartSize.value.height - height) > 10)) {
+            chartInstance.clear();
+        }
+        
+        chartInstance.resize();
+        chartSize.value = { width, height };
+        scheduleRender();
+    }
+};
 
+let resizeObserver: ResizeObserver | null = null;
+
+const handleVisibilityChange = () => {
+    if (!document.hidden) {
+        startDataListener();
+    }
+};
+
+onMounted(() => {
     if (chartRef.value) {
+        // Ensure no leftovers from HMR or previous sessions
+        echarts.dispose(chartRef.value);
         chartInstance = echarts.init(chartRef.value, 'dark');
 
-        // initialize chart size for composable positioning
-        chartSize.value = {
-            width: chartRef.value.clientWidth,
-            height: chartRef.value.clientHeight
-        };
+        // Initial setup
+        handleResize();
+
+        // Use ResizeObserver for more reliable layout tracking
+        resizeObserver = new ResizeObserver(() => {
+            handleResize();
+        });
+        resizeObserver.observe(chartRef.value);
 
         // Initial Emit
         const initialNode = nodes.value.find(n => selectedNodeNames.value.includes(n.name));
@@ -87,11 +115,15 @@ onMounted(() => {
             props.stage.id,
             displayGatewayThroughput.value,
             gatewaySvgRaw,
-            chartSize.value?.width || 800,
+            chartSize.value?.width || 800, // Should be superseded by not rendering without chartSize
             chartSize.value?.height || 400
         );
 
-        scheduleRender();
+        // Final layout sync after DOM settling (e.g. after transitions/animations)
+        setTimeout(() => {
+            handleResize();
+            startDataListener(); // Start listening ONLY after initial layout is stable
+        }, 150);
 
         // Robust Click Handler on the transparent Interaction Layer or GL Layer
         chartInstance.on('click', (params: any) => {
@@ -105,20 +137,8 @@ onMounted(() => {
     }
 });
 
-const handleResize = () => {
-    chartInstance?.resize();
-    if (chartRef.value) {
-        chartSize.value = { width: chartRef.value.clientWidth, height: chartRef.value.clientHeight };
-    }
-};
-
-const handleVisibilityChange = () => {
-    if (!document.hidden) {
-        startDataListener();
-    }
-};
-
 onUnmounted(() => {
+    resizeObserver?.disconnect();
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
 

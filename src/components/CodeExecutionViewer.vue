@@ -4,7 +4,12 @@ import { Cpu, FileCode } from 'lucide-vue-next';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
-    stage: { type: Object as () => StageInfo, required: true }
+    stage: { type: Object as () => StageInfo, required: true },
+    devices: { type: Array as () => any[], default: () => [] }
+});
+
+const activeInstancesCount = computed(() => {
+    return props.devices.filter(d => d.stageId === selectedType.value && d.status === 'online').length;
 });
 
 const showFullCode = ref(false);
@@ -123,6 +128,11 @@ const copyCode = async () => {
                     <div class="flex items-center gap-1">
                         <span class="text-gray-500">REDUCTION:</span>
                         <span class="text-rose-400 font-bold">{{ reductionRate }}%</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-700"></div>
+                    <div class="flex items-center gap-1">
+                        <span class="text-gray-500">ACTIVE INSTANCES:</span>
+                        <span class="text-teal-400 font-bold font-mono">{{ activeInstancesCount }}</span>
                     </div>
                 </div>
             </div>

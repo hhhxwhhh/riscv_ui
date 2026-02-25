@@ -27,7 +27,14 @@ const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
 
 // Initial empty list, populated by API and WebSocket
-const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
+const devices = ref<{ 
+  id?: string; 
+  name: string; 
+  ip: string; 
+  status?: string; 
+  metrics?: { throughput: number; latency: number; securityScore: number };
+  stageId?: string;
+}[]>([]);
 const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 
 const currentStageIndex = ref(0); // Default to Authentication
@@ -80,7 +87,7 @@ const handleTelemetry = (packet: any) => {
   if (packet.type === 'device_join' && packet.device) {
     const exists = devices.value.find(d => d.ip === packet.device.ip || d.name === packet.device.name);
     if (!exists) {
-      devices.value = [...devices.value, packet.device];
+      devices.value = [...devices.value, { ...packet.device, metrics: { throughput: 0, latency: 0, securityScore: 0 } }];
     }
     return;
   }
@@ -93,9 +100,29 @@ const handleTelemetry = (packet: any) => {
     return;
   }
 
-  // Update global metrics or selected device metrics
+  // Update specific device in the list and global metrics
+  if (packet.deviceId || packet.source) {
+    const deviceIndex = devices.value.findIndex(d => d.id === packet.deviceId || d.ip === packet.source);
+    if (deviceIndex !== -1) {
+      const dev = devices.value[deviceIndex];
+      if (dev && packet.metrics) {
+        dev.metrics = {
+          throughput: Number(packet.metrics.throughput ?? 0),
+          latency: Number(packet.metrics.latency ?? 0),
+          securityScore: Number(packet.metrics.securityScore ?? 0)
+        };
+      }
+      if (dev && packet.stageId) {
+        dev.stageId = packet.stageId;
+      }
+      if (dev && packet.status) {
+        dev.status = packet.status;
+      }
+    }
+  }
+
+  // Update global/selected metrics display
   if (packet?.metrics) {
-    // Filter metrics by any of the selected IPs
     const isTarget = selectedDeviceIPs.value.length === 0 || selectedDeviceIPs.value.includes(packet.source as string);
 
     if (isTarget) {
@@ -299,12 +326,12 @@ onMounted(() => {
         <!-- Left: Code Execution (2/3 width) -->
         <div class="lg:col-span-2 min-h-[420px] panel panel-glow p-3">
           <CodeExecutionViewer :deviceName="selectedDevices[0]" :deviceIP="selectedDeviceIPs[0]"
-            :stage="currentStage" />
+            :stage="currentStage" :devices="devices" />
         </div>
 
         <!-- Right: Analysis (1/3 width) -->
         <div class="lg:col-span-1 min-h-[420px] panel panel-glow p-3">
-          <DataAnalysis :deviceName="selectedDevices[0]" :metrics="latestMetrics" :stage="currentStage" />
+          <DataAnalysis :deviceName="selectedDevices[0]" :metrics="latestMetrics" :stage="currentStage" :devices="devices" />
         </div>
       </section>
     </div>

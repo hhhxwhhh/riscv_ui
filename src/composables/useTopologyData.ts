@@ -63,9 +63,11 @@ export function useTopologyData(
                 return true;
             });
 
-        // determine chart size if provided
-        const w = chartSizeRef?.value?.width || ((typeof window !== 'undefined') ? window.innerWidth : 1200);
-        const h = chartSizeRef?.value?.height || ((typeof window !== 'undefined') ? window.innerHeight : 800);
+        // determine chart size if provided - STRICTLY use chartSizeRef if available to avoid coordinate mismatch
+        if (!chartSizeRef?.value) return; 
+
+        const w = chartSizeRef.value.width;
+        const h = chartSizeRef.value.height;
         
         const layout = calculateTopologyLayout(w, h, deviceList.length);
 
