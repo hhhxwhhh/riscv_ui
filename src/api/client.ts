@@ -18,7 +18,7 @@ export const fetchJson = async <T>(url: string, options: FetchOptions = {}): Pro
     try {
         const res = await fetch(url, { signal: controller.signal });
         
-        // 检查请求是否被中止（超时）
+        // Check if request was aborted (timeout)
         if (controller.signal.aborted) {
             throw new ApiError('Request timed out');
         }

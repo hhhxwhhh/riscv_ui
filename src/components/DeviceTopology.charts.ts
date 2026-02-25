@@ -33,7 +33,7 @@ const calculateFlowLines = (
         if (viewMode === 'all' || isRelayMode) {
             stagesToShow = (!isGlobal) ? stageIds : [node.stageId];
         } else {
-            // Stage 模式下，核心关注点始终是当前顶部的全局阶段
+            // In Stage mode, the focus is always on the current global stage
             stagesToShow = [currentStageId];
         }
 
@@ -41,7 +41,7 @@ const calculateFlowLines = (
             const gatewayNode = nodes.find(n => n.category === 'gateway');
             if (!gatewayNode) return;
 
-            // 过滤逻辑：在单阶段视图模式下，如果节点活跃但活跃阶段不匹配，则不显示流量线
+            // Filter logic: In single stage view mode, if node is active but stage doesn't match, don't show lines
             const isLogicalMatch = (viewMode === 'stage' && isActive) ? (node.stageId === sid) : true;
             if (!isLogicalMatch) return;
 
@@ -75,14 +75,14 @@ const calculateFlowLines = (
 
             if (sPos && tPos) {
                 const tput = node.throughput || 100;
-                // 更动态的不透明度：低流量时几乎透明，高流量时非常亮
+                // Dynamic opacity: near transparent on low traffic, bright on high
                 const activeOpacity = Math.max(0.6, Math.min(1.0, tput / 800));
                 const flowOpacity = isActive ? activeOpacity : 0.05;
                 
                 const ctx = getStageContext(sid);
                 const stageLines = linesByStage[sid] || (linesByStage[sid] = []);
                 
-                // 线条粗细随流量变化：1.2 到 4.5 之间
+                // Line width varies with throughput: between 1.2 and 4.5
                 const lineWidth = isActive ? Math.max(1.5, Math.min(4.5, 1.2 + (tput / 250))) : 1.2;
 
                 // Special "Internal Processing" Loop for Decrypt stage
@@ -176,7 +176,7 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
 
 const buildFlowLayer = (
     linesByStage: Record<string, any[]>,
-    isLargeMode: boolean,
+    useGpuRendering: boolean,
     isGlobal: boolean,
     nodes: NodeData[]
 ) => {
@@ -188,8 +188,8 @@ const buildFlowLayer = (
         const ctx = getStageContext(sid);
         
         // Optimize for large datasets
-        const MAX_LINES = isLargeMode ? 200 : Infinity;
-        const displayData = isLargeMode 
+        const MAX_LINES = useGpuRendering ? 600 : Infinity;
+        const displayData = useGpuRendering 
             ? lines.sort((a, b) => b.throughput - a.throughput).slice(0, MAX_LINES)
             : lines;
 
@@ -210,18 +210,10 @@ const buildFlowLayer = (
         const symbolSize = isGlobal ? Math.max(4, Math.min(8, 3 + (avgTput / 300))) : Math.max(6, Math.min(12, 5 + (avgTput / 200)));
         const trailLength = Math.max(0.3, Math.min(0.8, 0.4 + (avgTput / 1200)));
 
-        series.push({
-            type: 'lines',
+        const lineBase = {
+            type: useGpuRendering ? 'linesGL' : 'lines',
             name: `Flow-${sid}`,
             coordinateSystem: 'cartesian2d',
-            effect: {
-                show: true,
-                period: period,
-                trailLength: trailLength,
-                symbol: 'arrow',
-                symbolSize: symbolSize,
-                color: ctx.color
-            },
             lineStyle: {
                 color: ctx.color,
                 width: isGlobal ? 1 : 2,
@@ -230,7 +222,20 @@ const buildFlowLayer = (
             },
             data: displayData,
             z: 1
-        });
+        } as any;
+
+        if (!useGpuRendering) {
+            lineBase.effect = {
+                show: true,
+                period: period,
+                trailLength: trailLength,
+                symbol: 'arrow',
+                symbolSize: symbolSize,
+                color: ctx.color
+            };
+        }
+
+        series.push(lineBase);
     });
     return series;
 };
@@ -238,141 +243,45 @@ const buildFlowLayer = (
 const buildNodeLayer = (
     nodes: NodeData[], 
     selectedNames: string[], 
-    viewMode: string, 
+    _viewMode: string, 
     currentStageId: string, 
     gatewayThroughput: number, 
-    gatewaySvg: string, 
-    isLargeMode: boolean,
-    isRelayMode: boolean
+    _gatewaySvg: string, 
+    _isLargeMode: boolean,
+    _isRelayMode: boolean
 ) => {
-    const isGlobal = selectedNames.length === 0;
-
-    // Use GL for massive datasets
-    if (isLargeMode) {
-        return [{
-            type: 'scatterGL',
-            name: 'GLNodes',
-            coordinateSystem: 'cartesian2d',
-            symbolSize: 6,
-            itemStyle: { color: '#7dd3fc', opacity: 0.8 },
-            data: nodes.map(node => {
-                const isGateway = node.category === 'gateway';
-                const isActive = node.isBlinking || node.throughput > 0;
-                const sid = (viewMode === 'all' || isActive) ? (node.stageId || 'AUTH') : currentStageId;
-                const ctx = getStageContext(sid);
-                const color = isGateway ? getGatewayColor(gatewayThroughput) : (isActive || selectedNames.includes(node.name) ? ctx.color : THEME.textMuted);
-                return { name: node.name, value: [node.x, node.y, 1], itemStyle: { color }};
-            }),
-            z: 2
-        }];
-    }
-
-    // Standard Graph Component
     return [{
-        type: 'graph',
+        type: 'scatterGL',
+        name: 'GLNodes',
         coordinateSystem: 'cartesian2d',
-        layout: 'none',
-        silent: true,
-        symbolSize: (_value: any, params: any) => {
-            const name = params?.name || '';
-            const data = params?.data || {};
-            const isGateway = name.includes('Gateway');
-            const isActive = !!data.isBlinking;
-            const isDense = nodes.length > 40;
-            if (isGateway) return isDense ? 58 : 65;
-            const base = isDense ? 16 : 22;
-            const active = isDense ? 22 : 28;
-            const size = isActive ? active : base;
-            return [Math.round(size * 1.4), size];
-        },
-        label: {
-            show: false,
-            position: 'bottom',
-            distance: 8,
-            backgroundColor: 'rgba(2, 6, 23, 0.85)',
-            borderColor: 'rgba(56, 189, 248, 0.3)',
-            borderWidth: 1,
-            borderRadius: 6,
-            padding: [8, 10],
-            shadowColor: 'rgba(0, 0, 0, 0.6)',
-            shadowBlur: 10,
-            color: '#d1d5db',
-            formatter: (p: any) => {
-                const node = p.data;
-                const isGateway = node.category === 'gateway';
-                
-                if (isGateway) {
-                    return `{gatewayName|${p.name}}\n{gatewayBadge|${Math.round(gatewayThroughput)} Mbps}`;
-                }
-
-                // Filtering labels to avoid clutter
-                const isActive = node.isBlinking || node.throughput > 0;
-                const isSelected = selectedNames.includes(node.name);
-                const isDense = nodes.length > 20;
-
-                if (isDense && !isActive && !isSelected) return '';
-
-                let prefix = '';
-                if (isRelayMode && isSelected) {
-                    prefix = selectedNames.indexOf(node.name) === 0 ? 'SRC ' : 'DST ';
-                }
-
-                const statusDot = isActive ? '{activeDot|●} ' : '';
-                const tputStr = `\n{tput|${Math.round(node.throughput || 0)} Mbps}`;
-                const stageText = getStageContext(node.stageId || 'AUTH').text;
-                const stageStr = `\n{stage|${stageText}}`;
-
-                return `{name|${prefix}${p.name}}\n${statusDot}{ip|${node.value}}${stageStr}${tputStr}`;
-            },
-            rich: {
-                name: { fontSize: 11, fontWeight: 'bold', color: '#f8fafc', align: 'center', lineHeight: 16 },
-                ip: { fontSize: 9, color: '#94a3b8', align: 'center', padding: [0, 2] },
-                stage: { fontSize: 9, color: '#cbd5f5', align: 'center', padding: [2, 0, 0, 0] },
-                tput: { fontSize: 10, color: '#38bdf8', align: 'center', fontWeight: 'bold', padding: [2, 0, 0, 0] },
-                activeDot: { fontSize: 9, color: '#34d399' },
-                gatewayName: { fontSize: 13, fontWeight: 'bold', color: '#fff', align: 'center', padding: [0, 0, 6, 0] },
-                gatewayBadge: { fontSize: 11, color: '#fff', backgroundColor: THEME.primary, padding: [3, 8], borderRadius: 4, fontWeight: 'bold' }
-            }
-        },
-        emphasis: {
-            label: {
-                show: true
-            }
+        blendMode: 'lighter',
+        symbol: 'circle',
+        label: { show: false }, // Ensure labels are hidden by default
+        symbolSize: (value: number[], params: any) => {
+            const node = params?.data || {};
+            if (node.category === 'gateway') return 26;
+            const isActive = !!node.isBlinking || (value?.[2] || 0) > 0;
+            return isActive ? 13 : 9;
         },
         data: nodes.map(node => {
             const isGateway = node.category === 'gateway';
             const isSelected = selectedNames.includes(node.name);
             const isActive = node.isBlinking || node.throughput > 0;
-
-            // 修复点线颜色同步与全局阶段过滤
-            // 逻辑：如果活跃则显示其实际阶段，否则显示当前顶部的全局阶段
             const sid = isActive ? node.stageId : currentStageId;
             const ctx = getStageContext(sid);
             
-            let color = isGateway ? getGatewayColor(gatewayThroughput) : (isSelected || isGlobal ? ctx.color : THEME.textMuted);
-            let shadowBlur = isSelected ? 30 : 10;
+            let color = isGateway ? getGatewayColor(gatewayThroughput) : (isSelected ? ctx.color : THEME.textMuted);
             
             if (isActive && !isGateway) {
                 color = ctx.color;
-                shadowBlur = 40;
             }
-
-            // Dim outline for inactive nodes in dense mode
-            const opacity = (nodes.length > 20 && !isGateway && !isActive && !isSelected) ? 0.4 : 1.0;
 
             return {
                 ...node,
-                value: [node.x, node.y, node.value], // Cartesian coordinate requires value array
-                symbol: isGateway ? 'image://' + gatewaySvg : 'circle',
-                symbolKeepAspect: isGateway,
-                symbolSize: isGateway ? undefined : [Math.round((nodes.length > 40 ? 16 : 22) * 1.4), (nodes.length > 40 ? 16 : 22)],
+                value: [node.x, node.y, node.throughput || 0],
                 itemStyle: {
-                    color: !isGateway ? '#020617' : color,
-                    borderColor: color,
-                    borderWidth: isGateway ? 0 : (isActive ? 3 : 2),
-                    shadowBlur: shadowBlur,
-                    shadowColor: color,
-                    opacity
+                    color,
+                    opacity: isGateway ? 0.95 : (isActive || isSelected ? 0.9 : 0.45)
                 }
             };
         }),
@@ -389,8 +298,25 @@ const buildInteractionLayer = (nodes: NodeData[], isLargeMode: boolean) => {
         coordinateSystem: 'cartesian2d',
         layout: 'none',
         cursor: 'pointer',
-        symbolSize: 60, // Large hit area
-        itemStyle: { opacity: 0 }, // Invisible
+        symbolSize: 40, // Reduced from 60 to be more precise
+        itemStyle: { opacity: 0 }, 
+        label: { 
+            show: false // Hide labels by default
+        },
+        emphasis: {
+            label: {
+                show: true, // Show labels only on hover
+                position: 'top',
+                formatter: '{b}',
+                color: '#7dd3fc',
+                fontSize: 11,
+                fontWeight: 'bold',
+                backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                padding: [4, 8],
+                borderRadius: 4,
+                distance: 10
+            }
+        },
         data: nodes.map(n => ({
             name: n.name,
             value: [n.x, n.y, n.value]
@@ -413,7 +339,7 @@ export const buildChartOption = (
 ): echarts.EChartsOption => {
     const isRelayMode = selectedNames.length === 2;
     const isGlobal = selectedNames.length === 0;
-    const isLargeMode = nodes.length > 500;
+    const useGpuRendering = true;
 
     // 1. Prepare Layout Map
     const nodeMap: Record<string, [number, number]> = {};
@@ -427,11 +353,11 @@ export const buildChartOption = (
 
     // 3. Assemble Series
     const series = [
-        ...buildGatewayLayer(nodes, displayGatewayThroughput, isLargeMode),
+        ...buildGatewayLayer(nodes, displayGatewayThroughput, false),
         // buildBackgroundLayer removed for cleanliness/simplicity in redraw
-        ...buildFlowLayer(linesByStage, isLargeMode, isGlobal, nodes),
-        ...buildNodeLayer(nodes, selectedNames, viewMode, stageId, displayGatewayThroughput, gatewaySvgRaw, isLargeMode, isRelayMode),
-        ...buildInteractionLayer(nodes, isLargeMode)
+        ...buildFlowLayer(linesByStage, useGpuRendering, isGlobal, nodes),
+        ...buildNodeLayer(nodes, selectedNames, viewMode, stageId, displayGatewayThroughput, gatewaySvgRaw, useGpuRendering, isRelayMode),
+        ...buildInteractionLayer(nodes, useGpuRendering)
     ];
 
     // 4. Construct Option
@@ -493,7 +419,7 @@ export const buildChartOption = (
             borderColor: THEME.grid,
             textStyle: { color: '#f3f4f6' },
             formatter: (params: any) => {
-                if (params.seriesType === 'lines') {
+                if (params.seriesType === 'lines' || params.seriesType === 'linesGL') {
                     const data = params.data;
                     return `
                     <div class="px-3 py-2 font-mono text-xs">

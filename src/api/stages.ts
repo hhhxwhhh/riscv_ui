@@ -34,7 +34,7 @@ export const STAGES: StageInfo[] = [
     {
         id: 'AUTH',
         name: 'Authentication',
-        description: '基于 SM2 算法的设备身份双向认证过程。确认设备合法性，建立安全信任。',
+        description: 'Mutual device authentication based on SM2 algorithm. Verifies device legitimacy and establishes secure trust.',
         statusText: 'AUTHENTICATING...',
         flow: { source: 'device', target: 'gateway', label: 'Auth Challenge/Response', direction: 'reverse' },
         standardInstructions: [
@@ -54,32 +54,32 @@ export const STAGES: StageInfo[] = [
             {
                 text: 'LKEY    k0, 0(secure)    # HW Root Key',
                 mappedStandardIdxs: [0, 1],
-                detail: '硬件加载根密钥，代替软件密钥加载和设备ID获取。'
+                detail: 'Hardware loads the root key, replacing software key loading and ID retrieval.'
             },
             {
                 text: 'RISCV.SM2.SIGN a1, k0   # HW SM2 Sign',
                 mappedStandardIdxs: [2, 3, 4],
-                detail: '硬件SM2签名，代替挑战种子、哈希混合和移位掩码。'
+                detail: 'Hardware SM2 signing, replacing challenge seed processing, hash mixing, and masking.'
             },
             {
                 text: 'RISCV.SM2.VER  a2, a1   # HW SM2 Verify',
                 mappedStandardIdxs: [5, 6, 7, 8],
-                detail: '硬件SM2验签，代替软件验签和公钥加载。'
+                detail: 'Hardware SM2 verification, replacing software signature verification and public key loading.'
             },
             {
                 text: 'CVAL.ID  a0, a2         # Validate ID',
                 mappedStandardIdxs: [9, 10],
-                detail: '硬件ID校验，代替软件ECC乘法和结果检查。'
+                detail: 'Hardware ID validation, replacing software ECC multiplication and result checks.'
             },
             {
                 text: '# Fast Path Complete',
                 mappedStandardIdxs: [],
-                detail: '快速路径完成，无需多步软件循环。'
+                detail: 'Fast path completed without multi-step software loops.'
             },
             {
                 text: '# One Cycle Auth',
                 mappedStandardIdxs: [],
-                detail: '单周期认证，极大提升效率。'
+                detail: 'Single-cycle authentication, significantly improving efficiency.'
             }
         ],
         metrics: {
@@ -92,20 +92,20 @@ export const STAGES: StageInfo[] = [
         },
         fullCode: {
             c: `int verify_device(device_t *dev) {
-  // 复杂的软件 ECC 乘法实现
+  // Complex software ECC multiplication implementation
   point_t pub = load_public_key(dev->id);
   signature_t sig = receive_signature();
   
-  // 软件计算耗时极长
+  // Software calculation takes a very long time
   if (software_ecc_verify(&pub, &sig) == VALID) {
     return 1;
   }
   return 0;
 }`,
             asm: `verify_device_hw:
-  lkey  k0, 0(secure_mem)  # 加载根密钥
-  lbuf  a0, 0(input_ptr)   # 加载待验签数据
-  # 使用 RISC-V SM2 指令集
+  lkey  k0, 0(secure_mem)  # Load root key
+  lbuf  a0, 0(input_ptr)   # Load signature data
+  # Use RISC-V SM2 instructions
   riscv.sm2.verify a1, a0, k0
   ret`
         }
@@ -113,8 +113,8 @@ export const STAGES: StageInfo[] = [
     {
         id: 'ENCRYPT',
         name: 'Encryption',
-        description: '使用 SM4 硬件加速对业务数据进行加密。确保传感器数据在网络中不被窃听。',
-        statusText: 'ENCRYPTING PAYLOAD',
+        description: 'Gateway encrypts data using SM4-HW algorithm based on custom RISC-V extensions. Drastically reduces CPU load.',
+        statusText: 'HW ENCRYPTING PAYLOAD',
         flow: { source: 'device', target: 'gateway', label: 'Secure Data Stream', direction: 'forward' },
         standardInstructions: [
             'LD      a0, 0(packet)    # Load Block',
@@ -131,32 +131,32 @@ export const STAGES: StageInfo[] = [
             {
                 text: 'LD      a0, 0(packet)    # Load 64-bit Chunk',
                 mappedStandardIdxs: [0],
-                detail: '一次性加载数据块，简化分步加载。'
+                detail: 'Loads data blocks in one go, simplifying incremental loading.'
             },
             {
                 text: 'LKEY    k1, 0(key_reg)   # Load SM4 Key',
                 mappedStandardIdxs: [1],
-                detail: '硬件密钥加载，代替软件密钥处理。'
+                detail: 'Hardware key loading, replacing software key processing.'
             },
             {
                 text: 'RISCV.SM4.ENC a0, a0, k1 # HW SM4 Step',
                 mappedStandardIdxs: [2, 3, 4, 5],
-                detail: '硬件加密一步到位，代替多轮软件加密。'
+                detail: 'Hardware encryption in one step, replacing multi-round software encryption.'
             },
             {
                 text: 'SD      a0, 0(out)       # Store to DMA',
                 mappedStandardIdxs: [8],
-                detail: '直接存储加密结果，简化存储流程。'
+                detail: 'Stores encryption results directly to DMA, simplifying output flow.'
             },
             {
                 text: '# Parallel Cipher Active',
                 mappedStandardIdxs: [6, 7],
-                detail: '并行加密，提升性能。'
+                detail: 'Parallel encryption active, boosts performance.'
             },
             {
                 text: '# Multi-Core Pipeline',
                 mappedStandardIdxs: [],
-                detail: '多核流水线加速。'
+                detail: 'Multi-core pipeline acceleration.'
             }
         ],
         metrics: {
@@ -170,16 +170,16 @@ export const STAGES: StageInfo[] = [
         fullCode: {
             c: `void encrypt_sm4_soft(uint32_t *plain, uint32_t *key) {
   uint32_t rk[32];
-  sm4_key_setup(key, rk); // 软件轮密钥生成
+  sm4_key_setup(key, rk); // Software key expansion
   for (int i=0; i<32; i++) {
-    // 软件模拟 32 轮加密迭代
+    // Software simulation of 32 rounds
     plain[0] = sm4_f(plain[0], rk[i]);
   }
 }`,
             asm: `encrypt_sm4_hw:
   lkey    k1, 0(key_reg)
-  vle32.v v0, (a0)         # 向量加载
-  # RISC-V 向量加解密扩展
+  vle32.v v0, (a0)         # Vector load
+  # RISC-V Cryptography Extensions
   vsm4e.vv v0, v1, k1
   vse32.v v0, (a1)
   ret`
@@ -188,7 +188,7 @@ export const STAGES: StageInfo[] = [
     {
         id: 'DECRYPT',
         name: 'Decryption',
-        description: '网关端接收并实时解密。将各物联网终端的机密数据还原为可处理格式。',
+        description: 'Real-time decryption at the gateway side. Restores confidential data from IoT terminals into processable formats.',
         statusText: 'DECRYPTING DATA',
         flow: { source: 'gateway', target: 'gateway', label: 'Gateway Side Processing', direction: 'internal' },
         standardInstructions: [
@@ -206,32 +206,32 @@ export const STAGES: StageInfo[] = [
             {
                 text: 'LD      a0, 0(cipher)    # Load Cipher Block',
                 mappedStandardIdxs: [0],
-                detail: '一次性加载密文块，简化分步加载。'
+                detail: 'Loads ciphertext blocks in one go.'
             },
             {
                 text: 'LKEY    k1, 0(key_reg)   # Load SM4 Key',
                 mappedStandardIdxs: [1],
-                detail: '硬件密钥加载，代替软件密钥处理。'
+                detail: 'Hardware key loading, replacing software key processing.'
             },
             {
                 text: 'RISCV.SM4.DEC a0, a0, k1 # HW SM4 Decrypt',
                 mappedStandardIdxs: [2, 3, 4, 5],
-                detail: '硬件解密一步到位，代替多轮软件解密。'
+                detail: 'Hardware decryption in one step, replacing 32 software rounds.'
             },
             {
                 text: 'SD      a0, 0(plain)     # Store to Memory',
                 mappedStandardIdxs: [8],
-                detail: '直接存储解密结果，简化存储流程。'
+                detail: 'Directly store decrypted results to memory.'
             },
             {
                 text: '# Inverse Cipher Fast',
                 mappedStandardIdxs: [6, 7],
-                detail: '逆向加密快速完成。'
+                detail: 'Inverse decryption completed rapidly.'
             },
             {
                 text: '# Low Latency Dec',
                 mappedStandardIdxs: [],
-                detail: '低延迟解密。'
+                detail: 'Low latency decryption active.'
             }
         ],
         metrics: {
@@ -247,13 +247,13 @@ export const STAGES: StageInfo[] = [
   uint32_t rk[32];
   sm4_key_setup_reverse(key, rk);
   for (int i=0; i<32; i++) {
-    // 同样需要 32 轮软件循环
+    // Requires 32 software iterations
     cipher[0] = sm4_f(cipher[0], rk[i]);
   }
 }`,
             asm: `decrypt_sm4_hw:
   lkey    k1, 0(key_reg)
-  riscv.sm4.dec a0, a0, k1 # 硬件单周期解密指令
+  riscv.sm4.dec a0, a0, k1 # Hardware single-cycle decryption
   sd      a0, 0(a1)
   ret`
         }
@@ -261,7 +261,7 @@ export const STAGES: StageInfo[] = [
     {
         id: 'HASH',
         name: 'Hash',
-        description: '计算 SM3 哈希。验证解密后的业务数据在处理过程中未被篡改，保证可靠性。',
+        description: 'Calculates SM3 hash. Verifies the integrity of decrypted business data to ensure no tampering occurred.',
         statusText: 'CALCULATING HASH',
         flow: { source: 'gateway', target: 'internal', label: 'Verified Forwarding', direction: 'forward' },
         standardInstructions: [
@@ -278,32 +278,32 @@ export const STAGES: StageInfo[] = [
             {
                 text: 'LD      a1, 0(data)      # Load Data Ptr',
                 mappedStandardIdxs: [0],
-                detail: '一次性加载数据指针，简化分步加载。'
+                detail: 'Loads data pointer once.'
             },
             {
                 text: 'RISCV.SM3.INIT          # Init SM3 Engine',
                 mappedStandardIdxs: [1],
-                detail: '硬件初始化哈希引擎，代替软件累加。'
+                detail: 'Hardware initializes SM3 engine, replacing software accumulation.'
             },
             {
                 text: 'RISCV.SM3.UPDATE a1, 64 # HW Batch Hash',
                 mappedStandardIdxs: [2, 3, 4, 5],
-                detail: '硬件批量哈希，代替多步软件循环。'
+                detail: 'Hardware batch processing, replacing software loops.'
             },
             {
                 text: 'RISCV.SM3.FINISH a0     # Get Digest',
                 mappedStandardIdxs: [6, 7],
-                detail: '硬件获取哈希结果，代替软件收尾。'
+                detail: 'Hardware retrieves result, replacing software finalize.'
             },
             {
                 text: '# Atomic Integrity',
                 mappedStandardIdxs: [],
-                detail: '原子性完整性校验。'
+                detail: 'Atomic integrity validation.'
             },
             {
                 text: '# Integrity Verified',
                 mappedStandardIdxs: [],
-                detail: '完整性已验证。'
+                detail: 'Integrity successfully verified.'
             }
         ],
         metrics: {
@@ -318,14 +318,14 @@ export const STAGES: StageInfo[] = [
             c: `uint32_t simple_hash(uint8_t *data, int len) {
   uint32_t hash = 0;
   for (int i=0; i<len; i++) {
-    // 软件循环移位、异或、累加
+    // Software shift, XOR, accumulate
     hash = ((hash << 5) + hash) + data[i];
   }
   return hash;
 }`,
             asm: `compute_sm3_hw:
   riscv.sm3.init
-  riscv.sm3.update v0, a0, a1 # 硬件加速压缩函数
+  riscv.sm3.update v0, a0, a1 # HW accelerated compression
   riscv.sm3.finish a0
   ret`
         }

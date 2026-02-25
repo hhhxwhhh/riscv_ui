@@ -5,12 +5,13 @@ import { STAGES } from './api/stages';
 import DeviceTopology from './components/DeviceTopology.vue';
 import CodeExecutionViewer from './components/CodeExecutionViewer.vue';
 import DataAnalysis from './components/DataAnalysis.vue';
+import PlatformOverview from './components/PlatformOverview.vue';
 
-// 持久化选择状态
+// Persist selection state
 const savedSelection = localStorage.getItem('selected_devices');
 const selectedDevices = ref<string[]>(savedSelection ? JSON.parse(savedSelection) : []);
 
-// 监听选择变化并保存
+// Watch for selection changes and save
 watch(selectedDevices, (newVal) => {
   localStorage.setItem('selected_devices', JSON.stringify(newVal));
 }, { deep: true });
@@ -25,7 +26,7 @@ const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
 
-// 去掉固定部分：初始化为空列表，由 API 和 WebSocket 填充
+// Initial empty list, populated by API and WebSocket
 const devices = ref<{ id?: string; name: string; ip: string }[]>([]);
 const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 
@@ -55,7 +56,7 @@ const toggleSimulation = () => {
 
 const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
-// 执行节点选择回调
+// Execute node selection callback
 const handleNodeSelect = (node: any) => {
   if (!node || !node.name) return;
   console.log('Selected Node:', node.name);
@@ -75,7 +76,7 @@ const handleWsLastMessage = (timestamp: number) => {
 const handleTelemetry = (packet: any) => {
   if (!packet) return;
 
-  // 补全：处理设备动态加入/退出消息
+  // Handle dynamic device join/exit messages
   if (packet.type === 'device_join' && packet.device) {
     const exists = devices.value.find(d => d.ip === packet.device.ip || d.name === packet.device.name);
     if (!exists) {
@@ -85,7 +86,7 @@ const handleTelemetry = (packet: any) => {
   }
   if (packet.type === 'device_exit') {
     devices.value = devices.value.filter(d => d.ip !== packet.ip && d.name !== packet.name);
-    // 同步更新选中状态
+    // Sync selected state
     if (selectedDevices.value.includes(packet.name)) {
       selectedDevices.value = selectedDevices.value.filter(n => n !== packet.name);
     }
@@ -103,6 +104,14 @@ const handleTelemetry = (packet: any) => {
         latency: Number(packet.metrics.latency ?? 0),
         securityScore: Number(packet.metrics.securityScore ?? 0)
       };
+
+      // Sync stage display if device has stageId and system is playing
+      if (packet.stageId && isSimulating.value) {
+        const idx = STAGES.findIndex(s => s.id === packet.stageId);
+        if (idx !== -1 && idx !== currentStageIndex.value) {
+          currentStageIndex.value = idx;
+        }
+      }
     }
   }
 };
@@ -112,7 +121,7 @@ const loadDevices = async (isBackground = false) => {
     if (!isBackground) apiStatus.value = 'loading';
     const data = await fetchJson<Array<{ id?: string; name: string; ip: string }>>(`${apiBase}/api/devices`);
 
-    // 修复：确保 API 返回的数据能够被正确合并
+    // Ensure API data is correctly merged
     const newDevices = (data || []).map((item) => ({
       id: item.id,
       name: item.name,
@@ -127,11 +136,11 @@ const loadDevices = async (isBackground = false) => {
       }
     }
 
-    // 同步选择状态：移除已不在列表中的设备
+    // Sync selection status: remove devices no longer in list
     const validNames = new Set(devices.value.map(d => d.name));
     const nextSelected = selectedDevices.value.filter(name => validNames.has(name));
 
-    // 移除自动选择逻辑，仅在有选中的设备离开时更新状态
+    // Remove auto-selection logic, only update when selected devices leave
     if (nextSelected.length !== selectedDevices.value.length) {
       selectedDevices.value = nextSelected;
     }
@@ -154,7 +163,7 @@ const loadMetrics = async () => {
     };
   } catch (error) {
     console.warn('Failed to load metrics from API, continuing with current values:', error);
-    // 保留当前的指标值，不覆盖
+    // Keep current values on error
   }
 };
 
@@ -162,7 +171,7 @@ onMounted(() => {
   loadDevices();
   loadMetrics();
 
-  // 修复：除了 WS 实时更新，每 10 秒强制全量同步一次，防止 WS 丢包导致的状态不一致
+  // Periodically sync every 10s back-up for WS
   setInterval(() => {
     loadDevices(true);
     loadMetrics();
@@ -181,14 +190,16 @@ onMounted(() => {
               class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-md text-sm">
               W7</div>
             <div>
-              <h1 class="text-lg font-bold tracking-wide">RISC-V Wi-Fi 7 全架构安全网关演示系统</h1>
-              <div class="subtle-text text-[11px]">面向物联网 802.11be 标准的全生命周期加解密监控</div>
+              <h1 class="text-lg font-black tracking-wide bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+                RISC-V ADVANCED SECURITY GATEWAY DASHBOARD
+              </h1>
+              <div class="subtle-text text-[10px] uppercase tracking-widest opacity-70">Advanced Crypto-Gateway Navigation System</div>
             </div>
           </div>
           <div class="flex items-center gap-2">
             <div
-              class="px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-200 border border-teal-400/30 text-[10px] font-semibold breathing-glow">
-              LIVE</div>
+              class="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-200 border border-indigo-400/30 text-[10px] font-semibold breathing-glow">
+              HARDWARE ACCELERATED</div>
             <div class="px-2 py-0.5 rounded-full text-[10px] font-semibold border" :class="apiStatus === 'ready'
               ? 'bg-emerald-500/10 text-emerald-200 border-emerald-400/30'
               : apiStatus === 'loading'
@@ -218,7 +229,11 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-2">
+        
+        <!-- Platform Level Summary -->
+        <PlatformOverview :devices="devices" class="mt-2" />
+
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2">
           <transition name="fade-slide" mode="out-in">
             <div :key="selectedDevices.join(',')" class="panel px-3 py-2">
               <div class="text-[10px] uppercase subtle-text">Active Device(s)</div>

@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 
 const app = express();
 
-// 日志中间件
+// Logger Middleware
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
@@ -16,7 +16,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 健康检查接口
+// Health Check API
 app.get("/api/health", (req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
@@ -36,7 +36,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 // In-memory data (replace with DB later)
-const DEVICE_OFFLINE_TIMEOUT = 10000; // 10秒未上报视为离线
+const DEVICE_OFFLINE_TIMEOUT = 10000; // Offline after 10s of inactivity
 const devices = Array.from({ length: 60 }, (_, i) => ({
   id: `dev-${String.fromCharCode(97 + (i % 26))}${i > 25 ? i : ""}`,
   name: `IoT Node ${String.fromCharCode(65 + (i % 26))}${i > 25 ? i : ""}`,
@@ -45,11 +45,11 @@ const devices = Array.from({ length: 60 }, (_, i) => ({
   lastSeen: Date.now(),
 }));
 
-// 动态加入和退出设备模拟 (模拟真实环境活跃度)
+// Simulated Dynamic Device Activity
 setInterval(() => {
-  if (Math.random() > 0.5) return; // 50% 概率动作降低抖动
+  if (Math.random() > 0.5) return; // 50% probability to reduce jitter
 
-  const action = Math.random() > 0.4 ? "add" : "remove"; // 略微倾向于增加，直到达到上限
+  const action = Math.random() > 0.4 ? "add" : "remove"; // Slightly biased towards adding until limit
 
   if (action === "add" && devices.length < 80) {
     const nextSuffix = devices.length + 100;
@@ -62,25 +62,25 @@ setInterval(() => {
     };
     devices.push(newDev);
     console.log(`[Dynamic] Device joined: ${newDev.name} (${newDev.ip})`);
-    // 修复：确保 broadcast 函数已定义再调用
+    // Ensure broadcast function exists before calling
     if (typeof broadcast === "function") {
       broadcast({ type: "device_join", device: newDev });
     }
   } else if (action === "remove" && devices.length > 45) {
-    // 随机移除一个，但不移除前10个核心节点
+    // Randomly remove a non-core node
     const index = 10 + Math.floor(Math.random() * (devices.length - 10));
     const removed = devices.splice(index, 1)[0];
-    // 清理该设备的活跃交易（如果正在进行）
+    // Cleanup active transactions for the device
     activeTransactions.delete(removed.ip);
     console.log(`[Dynamic] Device exited: ${removed.name} (${removed.ip})`);
-    // 修复：确保 broadcast 函数已定义再调用
+    // Ensure broadcast function exists before calling
     if (typeof broadcast === "function") {
       broadcast({ type: "device_exit", ip: removed.ip, name: removed.name });
     }
   }
 }, 8000);
 
-// 定时检测设备是否离线
+// Periodic check for offline devices
 setInterval(() => {
   const now = Date.now();
   devices.forEach((dev) => {
@@ -131,7 +131,7 @@ app.get("/api/metrics", (req, res) => {
 app.post("/api/telemetry", (req, res) => {
   const payload = req.body || {};
   const now = Date.now();
-  // 参数校验
+  // Parameter validation
   if (!payload.deviceId || typeof payload.deviceId !== "string") {
     console.warn("[API] /api/telemetry: deviceId missing or invalid");
     res.status(400).json({ error: "deviceId required" });
@@ -145,20 +145,41 @@ app.post("/api/telemetry", (req, res) => {
 
   const dev = devices.find((d) => d.id === payload.deviceId);
   if (!dev) {
-    console.warn("[API] /api/telemetry: device not found", payload.deviceId);
-    res.status(404).json({ error: "device not found" });
-    return;
+    // Dynamically register new real devices
+    const newDev = {
+      id: payload.deviceId,
+      name: payload.deviceName || `External Node ${payload.deviceId.slice(-4)}`,
+      ip: payload.source || req.ip || "unknown",
+      status: "online",
+      lastSeen: now,
+    };
+    devices.push(newDev);
+    console.log(`[External] New device registered: ${newDev.name} (${newDev.ip})`);
+    broadcast({ type: "device_join", device: newDev });
+  } else {
+    dev.lastSeen = now;
+    dev.status = payload.status || "online";
   }
-  dev.lastSeen = now;
-  dev.status = payload.status || "online";
 
   if (payload.metrics) {
     latestMetrics = { ...latestMetrics, ...payload.metrics };
   }
 
-  // 广播消息类型细分
+  // Fine-grained broadcast message types
   broadcast({ type: "telemetry", ts: now, ...payload });
   res.json({ ok: true });
+});
+
+// Platform Statistics
+app.get("/api/platform/stats", (req, res) => {
+  const onlineCount = devices.filter(d => d.status === 'online').length;
+  res.json({
+    totalDevices: devices.length,
+    onlineDevices: onlineCount,
+    totalThroughput: latestMetrics.throughput,
+    algorithm: 'SM4 Custom ISA',
+    securityLevel: 'High (HW Accelerated)'
+  });
 });
 
 const server = app.listen(PORT, () => {
@@ -186,18 +207,37 @@ function broadcastError(errorMsg) {
   });
 }
 
-// WebSocket连接，细分消息类型和错误处理
+// WebSocket connection with message typing and error handling
 wss.on("connection", (ws) => {
   ws.send(JSON.stringify({ type: "info", message: "connected" }));
 
   ws.on("message", (data) => {
     try {
       const payload = JSON.parse(data.toString());
-      // 校验deviceId
+      // Validate deviceId
       if (!payload.deviceId || typeof payload.deviceId !== "string") {
         broadcastError("deviceId required");
         return;
       }
+
+      // WebSocket also supports device registration
+      const now = Date.now();
+      const dev = devices.find((d) => d.id === payload.deviceId);
+      if (!dev) {
+        const newDev = {
+          id: payload.deviceId,
+          name: payload.deviceName || `WS Node ${payload.deviceId.slice(-4)}`,
+          ip: payload.source || "websocket",
+          status: "online",
+          lastSeen: now,
+        };
+        devices.push(newDev);
+        console.log(`[WS-External] New device registered: ${newDev.name}`);
+        broadcast({ type: "device_join", device: newDev });
+      } else {
+        dev.lastSeen = now;
+      }
+
       broadcast({ type: "telemetry", ts: Date.now(), ...payload });
     } catch (err) {
       broadcastError("Malformed message");

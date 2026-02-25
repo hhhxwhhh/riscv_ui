@@ -12,58 +12,49 @@ const activeCodeTab = ref<'c' | 'asm'>('asm');
 const codeSearch = ref('');
 const copied = ref(false);
 
-// 自定义指令类型映射（加密、解密、哈希、认证）
+// Custom instruction mappings
 const customTypes = [
-    { key: 'AUTH', label: 'SM2 身份认证' },
-    { key: 'ENCRYPT', label: 'SM4 数据加密' },
-    { key: 'DECRYPT', label: 'SM4 数据解密' },
-    { key: 'HASH', label: 'SM3 完整性哈希' }
+    { key: 'AUTH', label: 'SM2 Identity Auth' },
+    { key: 'ENCRYPT', label: 'SM4 Encryption' },
+    { key: 'DECRYPT', label: 'SM4 Decryption' },
+    { key: 'HASH', label: 'SM3 Integrity Hash' }
 ];
 
-// 默认选中当前的 props.stage.id
+// Default to current stage ID
 const selectedType = ref(props.stage.id);
 
 watch(() => props.stage.id, (newId: string) => {
     selectedType.value = newId;
 });
 
-// 获取当前类型对应的stage
+// Get stage for current type
 import { STAGES } from '../api/stages';
 const stageMap: { [key: string]: StageInfo } = STAGES.reduce(
     (acc, s) => { acc[s.id] = s; return acc; },
     {} as { [key: string]: StageInfo }
 );
 
-// 当前类型对应的自定义指令
+// Custom instructions for current type
 const customInstructions = computed(() => {
     const stage = stageMap[selectedType.value] || props.stage;
     if (stage && stage.customInstructions) return stage.customInstructions;
     return [];
 });
 
-// 当前类型对应的标准指令
+// Standard instructions for current type
 const standardInstructions = computed(() => {
     const stage = stageMap[selectedType.value] || props.stage;
     if (stage && stage.standardInstructions) return stage.standardInstructions;
     return [];
 });
 
-// 获取当前选中的自定义指令索引
+// Get selected custom instruction index
 const selectedCustomIdx = ref<number | null>(null);
 
-// 多选自定义指令支持高亮联动
+// Support highlight linkage for custom instructions
 const hoveredCustomIdx = ref<number | null>(null);
 
-// 计算分组展示数据
-// const groupedStandardInstructions = computed(() => {
-//     return customInstructions.value.map((item, idx) => ({
-//         customIdx: idx,
-//         customText: item.text,
-//         mappedStandardIdxs: item.mappedStandardIdxs,
-//     }));
-// });
-
-// 获取当前类型的性能指标
+// Get performance metrics for current type
 const reductionRate = computed(() => {
     const stdCount = standardInstructions.value.length;
     const custCount = customInstructions.value.filter(i => !i.text.startsWith('#')).length;
@@ -73,7 +64,7 @@ const reductionRate = computed(() => {
 
 const handleCustomHover = (cIdx: number | null) => {
     hoveredCustomIdx.value = cIdx;
-    // 不再在这里设置 hoveredStandardIdx，而是通过 computed 样式判断
+    // Use computed style instead of setting hovered index here
 };
 
 const activeCode = computed(() => {
@@ -126,7 +117,7 @@ const copyCode = async () => {
             <div class="flex flex-col">
                 <h2 class="text-xl font-bold text-gray-100 flex items-center gap-2">
                     <Cpu class="w-5 h-5 text-sky-400" />
-                    指令流对比与加速展示
+                    Instruction Stream Acceleration
                 </h2>
                 <div class="flex items-center gap-4 text-[10px] font-mono mt-1 opacity-80">
                     <div class="flex items-center gap-1">
@@ -146,7 +137,7 @@ const copyCode = async () => {
                 <button @click="showFullCode = true"
                     class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
                     <FileCode class="w-4 h-4" />
-                    查看完整源码
+                    View Source
                 </button>
             </div>
         </div>
@@ -241,7 +232,7 @@ const copyCode = async () => {
                 </div>
             </transition>
 
-            <!-- 左侧：标准指令流（Legacy） -->
+            <!-- Left: Standard Instruction Stream (Legacy) -->
             <div class="flex flex-col border-r border-gray-700/80 pr-2">
                 <div class="flex items-center justify-between mb-2">
                     <h3 class="text-[13px] font-bold text-gray-400 uppercase tracking-wider">
@@ -256,7 +247,7 @@ const copyCode = async () => {
                 </div>
                 <div
                     class="flex-1 font-mono text-sm bg-slate-950/20 border border-white/5 p-0 rounded relative overflow-hidden">
-                    <!-- 基准热力图背景 -->
+                    <!-- Benchmark heatmap background -->
                     <div class="absolute right-0 top-0 bottom-0 w-1 bg-slate-800/10 z-0">
                         <div v-for="(_, sIdx) in standardInstructions" :key="'heat-' + sIdx" class="w-full"
                             :style="{ height: (100 / standardInstructions.length) + '%' }"
@@ -282,7 +273,7 @@ const copyCode = async () => {
                 </div>
             </div>
 
-            <!-- 右侧：自定义指令类型选择区和指令列表 -->
+            <!-- Right: Custom Instruction Type Selection & List -->
             <div class="flex flex-col pl-2">
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex gap-2">
@@ -311,7 +302,7 @@ const copyCode = async () => {
                                 'opacity-30 blur-[0.5px] scale-[0.98]': hoveredCustomIdx !== null && hoveredCustomIdx !== idx
                             }">
 
-                            <!-- 指令加速扫描光效 -->
+            <!-- Instruction acceleration scan effect -->
                             <div v-if="hoveredCustomIdx === idx"
                                 class="absolute inset-0 bg-gradient-to-r from-transparent via-teal-500/10 to-transparent -translate-x-full animate-pulse-horizontal pointer-events-none">
                             </div>
@@ -338,7 +329,7 @@ const copyCode = async () => {
                                         {{ item.text }}
                                     </div>
 
-                                    <!-- 展开后的详情区域 -->
+                                    <!-- Expanded detail area -->
                                     <div v-if="idx === selectedCustomIdx || hoveredCustomIdx === idx"
                                         class="mt-3 text-[11px] text-slate-400 border-t border-teal-500/20 pt-2 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-300">
                                         <div

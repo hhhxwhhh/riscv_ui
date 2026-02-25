@@ -15,7 +15,7 @@ export const getGatewayColor = (throughput: number) => {
     const intensity = Math.min(1, throughput / maxExpectedThroughput);
 
     const red = 255;
-    const green = Math.floor(255 * (1 - intensity * 0.85)); // 颜色变化更明显
+    const green = Math.floor(255 * (1 - intensity * 0.85)); // More obvious color transition
     const blue = Math.floor(255 * (1 - intensity * 0.85));
     return `rgb(${red}, ${green}, ${blue})`;
 };

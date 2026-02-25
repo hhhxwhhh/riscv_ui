@@ -143,8 +143,8 @@ watch(
     <div class="topology-shell">
         <div class="topology-header">
             <div>
-                <div class="topology-title text-sky-400">Wi-Fi 7 安全网关实时拓扑</div>
-                <div class="topology-subtitle">分布式物联网终端与 RISC-V 核心交换监控</div>
+                <div class="topology-title text-sky-400">Wi-Fi 7 Security Gateway Real-time Topology</div>
+                <div class="topology-subtitle">Distributed IoT Terminal & RISC-V Core Exchange Monitor</div>
             </div>
             <div class="topology-meta">
                 <div class="flex bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60 mr-2">
@@ -169,7 +169,7 @@ watch(
         <div class="topology-body">
             <div class="topology-canvas">
                 <div ref="chartRef" class="w-full h-full"></div>
-                <div class="canvas-hint">悬停查看标签 • 点击节点选择</div>
+                <div class="canvas-hint">Hover to View Labels • Click Nodes to Select</div>
             </div>
 
             <div class="topology-side">
@@ -183,7 +183,7 @@ watch(
                     </div>
                     <div class="side-list overflow-y-auto pr-1 custom-scrollbar flex-1">
                         <div v-if="deviceNodes.length === 0" class="empty-state">
-                            暂无设备数据
+                            No device data available
                         </div>
                         <button v-for="node in deviceNodes" :key="node.name" @click="selectNode(node.name)"
                             class="side-item mb-1.5 transition-all duration-300"
@@ -216,34 +216,34 @@ watch(
                 </div>
 
                 <div class="side-card">
-                    <div class="side-title">安全域状态图例</div>
+                    <div class="side-title">Security Domain Legend</div>
                     <div class="grid grid-cols-1 gap-3">
                         <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" :style="{ background: theme.accent }"></span>
                             <div class="flex flex-col">
-                                <span class="text-[11px] font-bold text-gray-200">SM2 身份双向认证</span>
-                                <span class="text-[9px] text-gray-500">设备接入合法性校验周期</span>
+                                <span class="text-[11px] font-bold text-gray-200">SM2 Identity Mutual Auth</span>
+                                <span class="text-[9px] text-gray-500">Device access validation cycle</span>
                             </div>
                         </div>
                         <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" :style="{ background: theme.success }"></span>
                             <div class="flex flex-col">
-                                <span class="text-[11px] font-bold text-gray-200">SM4 业务流加密</span>
-                                <span class="text-[9px] text-gray-500">端到端数据负载强加密</span>
+                                <span class="text-[11px] font-bold text-gray-200">SM4 Traffic Encryption</span>
+                                <span class="text-[9px] text-gray-500">End-to-end data payload security</span>
                             </div>
                         </div>
                         <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" style="background: #f472b6"></span>
                             <div class="flex flex-col">
-                                <span class="text-[11px] font-bold text-gray-200">网关硬件内核解密</span>
-                                <span class="text-[9px] text-gray-500">RISC-V 专用指令集并行处理</span>
+                                <span class="text-[11px] font-bold text-gray-200">Gateway HW Decryption</span>
+                                <span class="text-[9px] text-gray-500">RISC-V Custom ISA Acceleration</span>
                             </div>
                         </div>
                         <div class="legend-row bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
                             <span class="legend-dot" :style="{ background: theme.warning }"></span>
                             <div class="flex flex-col">
-                                <span class="text-[11px] font-bold text-gray-200">SM3 完整性校验</span>
-                                <span class="text-[9px] text-gray-500">数据防篡改及链路状态同步</span>
+                                <span class="text-[11px] font-bold text-gray-200">SM3 Integrity Verification</span>
+                                <span class="text-[9px] text-gray-500">Anti-tamper & link sync</span>
                             </div>
                         </div>
                     </div>
