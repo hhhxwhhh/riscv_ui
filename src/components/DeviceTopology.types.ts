@@ -3,6 +3,12 @@ export type DeviceInfo = {
     name: string;
     ip: string;
     status?: string;
+    metrics?: {
+        throughput: number;
+        latency: number;
+        securityScore: number;
+    };
+    stageId?: string;
 };
 
 export type NodeData = {

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "mock": "node mock-ws-server.js",
+    "backend": "node backend/src/server.js",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },

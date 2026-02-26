@@ -118,7 +118,12 @@ export function useTopologyData(
 
         if (!packet?.source || packet.type === 'device_join' || packet.type === 'device_exit') return;
 
-        const targetNode = nodes.value.find(n => n.value === packet.source || n.value.includes(packet.source));
+        // Try to find by deviceId first, then by IP
+        const targetNode = nodes.value.find(n => 
+            (packet.deviceId && n.name.includes(packet.deviceId)) || // Some naming convention might include ID
+            n.value === packet.source || 
+            n.value.includes(packet.source)
+        );
 
         if (targetNode) {
             if (packet.stageId && typeof packet.stageId === 'string') {
@@ -228,8 +233,28 @@ export function useTopologyData(
     };
 
     // Watchers
-    watch(devicesSource, (newDevices) => {
-        buildNodesFromDevices(newDevices);
+    watch(devicesSource, (newDevices, oldDevices) => {
+        if (!newDevices) return;
+        
+        // Only rebuild structure if device list changed (length or specific IDs)
+        const oldIds = (oldDevices || []).map(d => d.id || d.name).sort().join(',');
+        const newIds = newDevices.map(d => d.id || d.name).sort().join(',');
+        
+        if (oldIds !== newIds || nodes.value.length === 0) {
+            buildNodesFromDevices(newDevices);
+        } else {
+            // Just update existing nodes with new values from devicesSource
+            newDevices.forEach(device => {
+                const node = nodes.value.find(n => n.name === device.name);
+                if (node) {
+                    node.value = device.ip;
+                    if (device.stageId) node.stageId = device.stageId;
+                    if (device.metrics?.throughput !== undefined) {
+                        node.throughput = device.metrics.throughput / 10;
+                    }
+                }
+            });
+        }
         triggerRender();
     }, { deep: true, immediate: true });
 

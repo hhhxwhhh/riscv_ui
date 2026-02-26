@@ -102,6 +102,7 @@ const updateChart = () => {
 watch(() => props.deviceName, updateChart);
 watch(() => props.metrics, updateChart);
 watch(() => props.stage, updateChart);
+watch(() => props.devices, updateChart, { deep: true });
 
 onMounted(() => {
     updateChart();

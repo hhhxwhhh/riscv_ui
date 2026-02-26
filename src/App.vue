@@ -100,23 +100,27 @@ const handleTelemetry = (packet: any) => {
     return;
   }
 
-  // Update specific device in the list and global metrics
+// Update specific device in the list and global metrics
   if (packet.deviceId || packet.source) {
     const deviceIndex = devices.value.findIndex(d => d.id === packet.deviceId || d.ip === packet.source);
     if (deviceIndex !== -1) {
       const dev = devices.value[deviceIndex];
-      if (dev && packet.metrics) {
-        dev.metrics = {
-          throughput: Number(packet.metrics.throughput ?? 0),
-          latency: Number(packet.metrics.latency ?? 0),
-          securityScore: Number(packet.metrics.securityScore ?? 0)
-        };
-      }
-      if (dev && packet.stageId) {
-        dev.stageId = packet.stageId;
-      }
-      if (dev && packet.status) {
-        dev.status = packet.status;
+      if (dev) {
+        if (packet.metrics) {
+          dev.metrics = {
+            throughput: Number(packet.metrics.throughput ?? 0),
+            latency: Number(packet.metrics.latency ?? 0),
+            securityScore: Number(packet.metrics.securityScore ?? 0)
+          };
+        }
+        if (packet.stageId) {
+          dev.stageId = packet.stageId;
+        }
+        if (packet.status) {
+          dev.status = packet.status;
+        }
+        // Trigger reactivity for deep watchers by notifying the ref
+        devices.value = [...devices.value];
       }
     }
   }
@@ -148,19 +152,21 @@ const loadDevices = async (isBackground = false) => {
     if (!isBackground) apiStatus.value = 'loading';
     const data = await fetchJson<Array<{ id?: string; name: string; ip: string }>>(`${apiBase}/api/devices`);
 
-    // Ensure API data is correctly merged
-    const newDevices = (data || []).map((item) => ({
-      id: item.id,
-      name: item.name,
-      ip: item.ip
-    }));
+    // Ensure API data is correctly merged without losing current metrics/stage state
+    const mergedDevices = (data || []).map((item) => {
+      const existing = devices.value.find(d => d.id === item.id || d.ip === item.ip);
+      return {
+        id: item.id,
+        name: item.name,
+        ip: item.ip,
+        status: existing?.status || 'online',
+        metrics: existing?.metrics || { throughput: 0, latency: 0, securityScore: 0 },
+        stageId: existing?.stageId
+      };
+    });
 
-    if (newDevices.length > 0) {
-      // Comparison to avoid unnecessary re-assignment
-      const sameLength = newDevices.length === devices.value.length;
-      if (!sameLength || JSON.stringify(newDevices) !== JSON.stringify(devices.value)) {
-        devices.value = newDevices;
-      }
+    if (mergedDevices.length > 0) {
+      devices.value = mergedDevices;
     }
 
     // Sync selection status: remove devices no longer in list
