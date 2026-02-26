@@ -103,6 +103,7 @@ const handleTelemetry = (packet: any) => {
 // Update specific device in the list and global metrics
   if (packet.deviceId || packet.source) {
     const deviceIndex = devices.value.findIndex(d => d.id === packet.deviceId || d.ip === packet.source);
+    
     if (deviceIndex !== -1) {
       const dev = devices.value[deviceIndex];
       if (dev) {
@@ -122,6 +123,21 @@ const handleTelemetry = (packet: any) => {
         // Trigger reactivity for deep watchers by notifying the ref
         devices.value = [...devices.value];
       }
+    } else if (packet.type === 'telemetry') {
+      // Dynamic device creation on first telemetry if not exists
+      const newDev = {
+        id: packet.deviceId || `dev-${Date.now()}`,
+        name: packet.deviceName || packet.deviceId || 'Unknown Device',
+        ip: packet.source || '0.0.0.0',
+        status: packet.status || 'active',
+        stageId: packet.stageId || 'AUTH',
+        metrics: {
+          throughput: Number(packet.metrics?.throughput ?? 0),
+          latency: Number(packet.metrics?.latency ?? 0),
+          securityScore: Number(packet.metrics?.securityScore ?? 0)
+        }
+      };
+      devices.value = [...devices.value, newDev];
     }
   }
 
@@ -136,10 +152,12 @@ const handleTelemetry = (packet: any) => {
         securityScore: Number(packet.metrics.securityScore ?? 0)
       };
 
-      // Sync stage display if device has stageId and system is playing
-      if (packet.stageId && isSimulating.value) {
+      // Sync stage display if exactly ONE device is selected
+      // This prevents the UI from jumping when multiple devices are in different stages
+      if (packet.stageId && selectedDevices.value.length === 1) {
         const idx = STAGES.findIndex(s => s.id === packet.stageId);
-        if (idx !== -1 && idx !== currentStageIndex.value) {
+        // Only sync if not simulating and it's a valid new stage
+        if (!isSimulating.value && idx !== -1 && idx !== currentStageIndex.value) {
           currentStageIndex.value = idx;
         }
       }

@@ -251,12 +251,12 @@ const buildNodeLayer = (
     _isRelayMode: boolean
 ) => {
     return [{
-        type: 'scatterGL',
+        type: 'scatter',
         name: 'GLNodes',
         coordinateSystem: 'cartesian2d',
-        blendMode: 'lighter',
         symbol: 'circle',
         label: { show: false }, // Ensure labels are hidden by default
+
         symbolSize: (value: number[], params: any) => {
             const node = params?.data || {};
             if (node.category === 'gateway') return 26;
@@ -339,7 +339,8 @@ export const buildChartOption = (
 ): echarts.EChartsOption => {
     const isRelayMode = selectedNames.length === 2;
     const isGlobal = selectedNames.length === 0;
-    const useGpuRendering = true;
+    const useGpuRendering = false;
+
 
     // 1. Prepare Layout Map
     const nodeMap: Record<string, [number, number]> = {};

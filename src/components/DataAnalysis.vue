@@ -99,13 +99,23 @@ const updateChart = () => {
     });
 };
 
-watch(() => props.deviceName, updateChart);
-watch(() => props.metrics, updateChart);
-watch(() => props.stage, updateChart);
-watch(() => props.devices, updateChart, { deep: true });
+let updateRequested = false;
+const scheduleUpdate = () => {
+    if (updateRequested) return;
+    updateRequested = true;
+    requestAnimationFrame(() => {
+        updateChart();
+        updateRequested = false;
+    });
+};
+
+watch(() => props.deviceName, scheduleUpdate);
+watch(() => props.metrics, scheduleUpdate);
+watch(() => props.stage, scheduleUpdate);
+watch(() => props.devices, scheduleUpdate, { deep: true });
 
 onMounted(() => {
-    updateChart();
+    scheduleUpdate();
 
     if (chartRef.value) {
         chartInstance = echarts.init(chartRef.value, 'dark');

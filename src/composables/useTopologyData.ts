@@ -110,6 +110,17 @@ export function useTopologyData(
     let reconnectTimer: number | null = null;
     let reconnectAttempts = 0;
     const blinkTimeouts = new Map<string, number>();
+    
+    // Throttle rendering to ~60fps maximum to prevent CPU spike during high-frequency telemetry
+    let renderRequested = false;
+    const throttledTriggerRender = () => {
+        if (renderRequested) return;
+        renderRequested = true;
+        requestAnimationFrame(() => {
+            triggerRender();
+            renderRequested = false;
+        });
+    };
 
     const handleIncomingPacket = (packet: any) => {
         if (isDisposed) return;
@@ -120,7 +131,7 @@ export function useTopologyData(
 
         // Try to find by deviceId first, then by IP
         const targetNode = nodes.value.find(n => 
-            (packet.deviceId && n.name.includes(packet.deviceId)) || // Some naming convention might include ID
+            (packet.deviceId && (n.name.includes(packet.deviceId) || n.name === packet.deviceId)) || 
             n.value === packet.source || 
             n.value.includes(packet.source)
         );
@@ -138,7 +149,7 @@ export function useTopologyData(
             }
 
             targetNode.isBlinking = true;
-            triggerRender();
+            throttledTriggerRender();
 
             const clearDelay = packet.isLastStage ? 3000 : 1100;
             const existing = blinkTimeouts.get(targetNode.name);
@@ -148,7 +159,7 @@ export function useTopologyData(
                 if (isDisposed) return;
                 targetNode.isBlinking = false;
                 targetNode.throughput = 0;
-                triggerRender();
+                throttledTriggerRender();
                 blinkTimeouts.delete(targetNode.name);
             }, clearDelay);
             blinkTimeouts.set(targetNode.name, timeoutId);
@@ -169,8 +180,17 @@ export function useTopologyData(
 
     const startDataListener = () => {
         if (isDisposed) return;
+        
+        // If already connected or connecting, don't start a new one unless it's a forced restart
+        if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+
         emit('ws-status', 'connecting');
-        if (socket) socket.close();
+        if (socket) {
+            socket.onclose = null; // Prevent recursion
+            socket.close();
+        }
 
         try {
             socket = new WebSocket(WS_URL);
