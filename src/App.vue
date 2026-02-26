@@ -40,6 +40,18 @@ const apiStatus = ref<'idle' | 'loading' | 'error' | 'ready'>('idle');
 const currentStageIndex = ref(0); // Default to Authentication
 const currentStage = computed(() => STAGES[currentStageIndex.value] || STAGES[0]);
 
+// Derived stage index based on selection
+const displayStageIndex = computed(() => {
+  if (selectedDevices.value.length === 1) {
+    const dev = devices.value.find(d => d.name === selectedDevices.value[0]);
+    if (dev && dev.stageId) {
+      const idx = STAGES.findIndex(s => s.id === dev.stageId);
+      if (idx !== -1) return idx;
+    }
+  }
+  return currentStageIndex.value;
+});
+
 const isSimulating = ref(false);
 let simTimer: any = null;
 
@@ -311,12 +323,12 @@ onMounted(() => {
             <div class="flex items-center gap-1 h-5">
               <div v-for="(stage, idx) in STAGES" :key="stage.id"
                 class="flex-1 h-1 rounded-full transition-all duration-500"
-                :class="idx <= currentStageIndex ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]' : 'bg-slate-700'">
+                :class="idx <= displayStageIndex ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]' : 'bg-slate-700'">
               </div>
             </div>
             <div class="text-[9px] text-slate-400 mt-0.5 flex justify-between">
               <span>START</span>
-              <span class="text-sky-300 font-bold uppercase">{{ currentStageIndex + 1 }}/{{ STAGES.length }}</span>
+              <span class="text-sky-300 font-bold uppercase">{{ displayStageIndex + 1 }}/{{ STAGES.length }}</span>
               <span>END</span>
             </div>
           </div>

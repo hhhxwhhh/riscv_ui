@@ -71,6 +71,14 @@ const deviceStates = new Map(devices.map(d => [d.id, {
     linkType: LINK_TYPES[Math.floor(Math.random() * LINK_TYPES.length)]
 }]));
 
+// Centralized Stage Physics for Consistent Simulation
+const STAGE_PHYSICS = {
+    "AUTH": { tputMult: 0.05, latBase: 4.5, secBase: 88, msg: "SAE Handshake" },
+    "ENCRYPT": { tputMult: 2.8, latBase: 0.5, secBase: 99, msg: "Zkn AES/SM4" },
+    "DECRYPT": { tputMult: 2.6, latBase: 0.6, secBase: 99, msg: "Zkn Vector-Dec" },
+    "HASH": { tputMult: 1.8, latBase: 0.9, secBase: 99.9, msg: "Zksh SM3-Digest" }
+};
+
 const jitter = (base, percent) => {
   const range = base * (percent / 100);
   return base + (Math.random() * range * 2 - range);
@@ -210,22 +218,15 @@ const broadcastState = () => {
                 if (state.baseTp < device.baseTp * 0.5) state.trafficTrend = 1;
 
                 const stage = STAGE_IDS[state.stageIdx];
+                const physics = STAGE_PHYSICS[stage];
                 
-                // Realistic performance metrics based on hardware acceleration
-                let throughputMultiplier = 1.0;
-                let latencyBase = 1.8;
-                let securityBase = 92;
+                // MLO Benefit: Lower latency and higher throughput stability
+                const isMLO = state.linkType === 'MLO-Aggregated';
+                let mloLatBoost = isMLO ? 0.75 : 1.0;
+                let mloTpBoost = isMLO ? 1.4 : 1.0;
 
-                if (stage === 'AUTH') { 
-                    throughputMultiplier = 0.05 + Math.random() * 0.1; // Very low TP during auth
-                    latencyBase = 3.5; 
-                    securityBase = 88; 
-                }
-                if (stage === 'ENCRYPT') { throughputMultiplier = 2.45; latencyBase = 0.55; securityBase = 99; }
-                if (stage === 'DECRYPT') { throughputMultiplier = 2.30; latencyBase = 0.65; securityBase = 99; }
-                if (stage === 'HASH') { throughputMultiplier = 1.65; latencyBase = 0.95; securityBase = 99.9; }
-
-                state.currentTp = jitter(state.baseTp * throughputMultiplier, 5);
+                state.currentTp = jitter(state.baseTp * physics.tputMult * mloTpBoost, 5);
+                const latFinal = jitter(physics.latBase * mloLatBoost, 8);
 
                 client.send(JSON.stringify({
                     type: "telemetry",
@@ -233,35 +234,35 @@ const broadcastState = () => {
                     deviceName: device.name,
                     deviceId: device.id,
                     deviceType: device.type,
-                    status: Math.random() > 0.992 ? "warning" : "online",
+                    status: Math.random() > 0.995 ? "warning" : "online",
                     stageId: stage,
                     linkType: state.linkType,
                     metrics: {
                         throughput: state.currentTp,
-                        latency: jitter(latencyBase, 10),
-                        securityScore: jitter(securityBase, 0.5)
+                        latency: latFinal,
+                        securityScore: jitter(physics.secBase, 0.4)
                     },
                     timestamp: Date.now()
                 }));
             });
 
-            // System-wide Event Log
+            // System-wide Event Log with higher technical density
             if (Math.random() > 0.88) {
                 const events = [
                     "SM2 Identity handshake successful: Device key verified",
                     "A100 Gateway: Custom ISA ENCRYPT kernel optimization (Zkn) active",
                     "Integrity verified for all mesh nodes via SM3 HASH (Zksh)",
                     "Throughput spike: Dynamic resource scaling for 4K/8K stream",
-                    "TEE: Secure Enclave report generated. PMP validation PASSED",
                     "MLO: High-priority traffic switched to 6GHz (STR mode) link",
                     "Wi-Fi 7: Preamble Puncturing active on 320MHz channel (DFS detection)",
                     "4096-QAM Modulation stabilized - EVM: -41.2dB",
-                    "Multi-RU allocation optimized for high-density IoT environment",
                     "RISC-V Vector Cryptographic Extension (Zkv) utilizing 256-bit VLEN",
                     "WPA3-SAE: Simultaneous Authentication of Equals completed",
                     "Packet loss mitigation: HARQ soft-combining active",
-                    "Power management: Target Wake Time (TWT) scheduled for Sensor group",
-                    "802.11be EHT PPDU format validated by Gateway PHY"
+                    "802.11be EHT PPDU format validated by Gateway PHY",
+                    "BSS Coloring: Co-channel interference mitigation [BSSID: 0x42]",
+                    "TWT: Power-save wake-up schedule optimized for Sensor nodes",
+                    "Targeted-RU: Spectral efficiency increased by +22% for OFDMA"
                 ];
                 client.send(JSON.stringify({
                     type: "log",

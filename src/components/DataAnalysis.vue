@@ -26,6 +26,7 @@ const theme = {
     success: '#10b981',
     successGlow: 'rgba(16, 185, 129, 0.4)',
     accent: '#38bdf8',
+    accentGlow: 'rgba(56, 189, 248, 0.4)',
     muted: '#64748b',
     grid: 'rgba(148, 163, 184, 0.05)'
 };
@@ -221,7 +222,18 @@ onMounted(() => {
                         ]),
                         borderRadius: [0, 4, 4, 0]
                     },
-                    label: { show: true, position: 'right', color: theme.success, fontSize: 10, fontWeight: 'bold', formatter: '{c} MB/s' }
+                    label: { show: true, position: 'right', color: theme.success, fontSize: 10, fontWeight: 'bold', formatter: '{c} MB/s' },
+                    showBackground: true,
+                    backgroundStyle: {
+                        color: 'rgba(56, 189, 248, 0.03)',
+                        borderRadius: [0, 4, 4, 0]
+                    },
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 15,
+                            shadowColor: theme.successGlow
+                        }
+                    }
                 },
                 {
                     name: 'Software (Std)',
@@ -248,14 +260,17 @@ onMounted(() => {
                     data: [stats.value.custom.score],
                     itemStyle: {
                         color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                            { offset: 0, color: theme.successGlow },
-                            { offset: 1, color: theme.success }
+                            { offset: 0, color: theme.accentGlow },
+                            { offset: 1, color: theme.accent }
                         ]),
                         borderRadius: [0, 4, 4, 0]
                     },
-                    label: { show: true, position: 'right', color: theme.success, fontSize: 10, formatter: '{c}/100' }
+                    label: { show: true, position: 'right', color: theme.accent, fontSize: 10, formatter: '{c}/100' }
                 }
             ],
+            animationDuration: 800,
+            animationDurationUpdate: 500,
+            animationThreshold: 2000,
             backgroundColor: 'transparent'
         };
 
