@@ -105,22 +105,27 @@ const handleTelemetry = (packet: any) => {
     const deviceIndex = devices.value.findIndex(d => d.id === packet.deviceId || d.ip === packet.source);
     
     if (deviceIndex !== -1) {
-      const dev = devices.value[deviceIndex];
-      if (dev) {
+      const existingDev = devices.value[deviceIndex];
+      
+      if (existingDev) {
+        // Update the existing object directly to maintain strict type structure
         if (packet.metrics) {
-          dev.metrics = {
+          existingDev.metrics = {
             throughput: Number(packet.metrics.throughput ?? 0),
             latency: Number(packet.metrics.latency ?? 0),
             securityScore: Number(packet.metrics.securityScore ?? 0)
           };
         }
         if (packet.stageId) {
-          dev.stageId = packet.stageId;
+          existingDev.stageId = packet.stageId;
         }
         if (packet.status) {
-          dev.status = packet.status;
+          existingDev.status = packet.status;
+        } else if (!existingDev.status) {
+          existingDev.status = 'online';
         }
-        // Trigger reactivity for deep watchers by notifying the ref
+
+        // Trigger reactivity for the array
         devices.value = [...devices.value];
       }
     } else if (packet.type === 'telemetry') {
@@ -129,7 +134,7 @@ const handleTelemetry = (packet: any) => {
         id: packet.deviceId || `dev-${Date.now()}`,
         name: packet.deviceName || packet.deviceId || 'Unknown Device',
         ip: packet.source || '0.0.0.0',
-        status: packet.status || 'active',
+        status: packet.status || 'online',
         stageId: packet.stageId || 'AUTH',
         metrics: {
           throughput: Number(packet.metrics?.throughput ?? 0),
@@ -137,7 +142,7 @@ const handleTelemetry = (packet: any) => {
           securityScore: Number(packet.metrics?.securityScore ?? 0)
         }
       };
-      devices.value = [...devices.value, newDev];
+      devices.value.push(newDev);
     }
   }
 

@@ -21,13 +21,13 @@ const stats = ref({
 });
 
 const theme = {
-    danger: '#fb7185',
-    dangerGlow: 'rgba(251, 113, 133, 0.2)',
-    success: '#34d399',
-    successGlow: 'rgba(52, 211, 153, 0.2)',
-    accent: '#7dd3fc',
-    muted: '#94a3b8',
-    grid: 'rgba(148, 163, 184, 0.1)'
+    danger: '#f43f5e',
+    dangerGlow: 'rgba(244, 63, 94, 0.4)',
+    success: '#10b981',
+    successGlow: 'rgba(16, 185, 129, 0.4)',
+    accent: '#38bdf8',
+    muted: '#64748b',
+    grid: 'rgba(148, 163, 184, 0.05)'
 };
 
 // Aggregate data for the whole group or specific device
@@ -93,8 +93,18 @@ const updateChart = () => {
         series: [
             { data: [data.standard.throughput] },
             { data: [data.custom.throughput] },
-            { data: [data.standard.score] },
-            { data: [data.custom.score] }
+            { 
+               data: [data.standard.score],
+               itemStyle: {
+                 color: data.standard.score > 90 ? theme.success : (data.standard.score > 70 ? '#fbbf24' : theme.danger)
+               }
+            },
+            { 
+               data: [data.custom.score],
+               itemStyle: {
+                 color: data.custom.score > 95 ? theme.success : '#38bdf8'
+               }
+            }
         ]
     });
 };

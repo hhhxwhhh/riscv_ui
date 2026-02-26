@@ -11,13 +11,32 @@ export const getStageContext = (stageId: string) => {
 }
 
 export const getGatewayColor = (throughput: number) => {
-    const maxExpectedThroughput = 5000;
+    const maxExpectedThroughput = 4500;
     const intensity = Math.min(1, throughput / maxExpectedThroughput);
 
-    const red = 255;
-    const green = Math.floor(255 * (1 - intensity * 0.85)); // More obvious color transition
-    const blue = Math.floor(255 * (1 - intensity * 0.85));
-    return `rgb(${red}, ${green}, ${blue})`;
+    // Dynamic scale: Cyan (Low) -> Blue (Mid) -> Purple (High) -> Rose (Peak)
+    if (intensity < 0.3) {
+      return `rgb(125, 211, 252)`; // Sky 300
+    } else if (intensity < 0.6) {
+      return `rgb(96, 165, 250)`; // Blue 400
+    } else if (intensity < 0.85) {
+      return `rgb(167, 139, 250)`; // Violet 400
+    } else {
+      return `rgb(251, 113, 133)`; // Rose 400
+    }
+};
+
+/**
+ * Returns a symbol type based on the device name category
+ */
+export const getNodeSymbol = (name: string): string => {
+    if (name.includes('Gateway')) return 'roundRect';
+    if (name.includes('Sensor')) return 'diamond';
+    if (name.includes('Camera')) return 'rect';
+    if (name.includes('Node')) return 'circle';
+    if (name.includes('Relay')) return 'triangle';
+    if (name.includes('Terminal')) return 'pin';
+    return 'circle';
 };
 
 /**

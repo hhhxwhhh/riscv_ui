@@ -144,7 +144,8 @@ export function useTopologyData(
             if (packet.metrics && typeof packet.metrics === 'object') {
                 const m = packet.metrics as any;
                 if (m.throughput) {
-                    targetNode.throughput = Number(m.throughput) / 10;
+                    // Use actual Mbps value for sidebar display
+                    targetNode.throughput = Number(m.throughput);
                 }
             }
 

@@ -1,103 +1,100 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Cpu, Activity, Database, Shield } from 'lucide-vue-next';
-
-interface PlatformStats {
-  totalDevices: number;
-  onlineDevices: number;
-  totalThroughput: number;
-  algorithm: string;
-  uptime: string;
-}
 
 const props = defineProps<{
     devices: any[]
 }>();
 
-const stats = ref<PlatformStats>({
-  totalDevices: 0,
-  onlineDevices: 0,
-  totalThroughput: 0,
-  algorithm: 'SM4 Custom ISA',
-  uptime: '00:00:00'
+const startTime = Date.now();
+const currentTime = ref(Date.now());
+
+// Ticker to ensure uptime updates every second independently of telemetry
+onMounted(() => {
+    setInterval(() => {
+        currentTime.value = Date.now();
+    }, 1000);
 });
 
-const avgLatency = ref(1.2);
-
-const startTime = Date.now();
-
-const formatUptime = () => {
-    const diff = Math.floor((Date.now() - startTime) / 1000);
+const displayUptime = computed(() => {
+    const diff = Math.floor((currentTime.value - startTime) / 1000);
     const h = Math.floor(diff / 3600).toString().padStart(2, '0');
     const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
     const s = (diff % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
-};
-
-let timer: any = null;
-
-onMounted(() => {
-    timer = setInterval(() => {
-        stats.value.uptime = formatUptime();
-        stats.value.totalDevices = props.devices.length;
-        
-        const onlineOnes = props.devices.filter(d => d.status === 'online');
-        stats.value.onlineDevices = onlineOnes.length;
-        
-        // Dynamic aggregation of metrics
-        const totalTp = onlineOnes.reduce((sum, d) => sum + (d.metrics?.throughput || 0), 0);
-        stats.value.totalThroughput = totalTp;
-
-        const totalLat = onlineOnes.reduce((sum, d) => sum + (d.metrics?.latency || 0), 0);
-        if (onlineOnes.length > 0) {
-            avgLatency.value = Number((totalLat / onlineOnes.length).toFixed(2));
-        }
-    }, 1000);
 });
 
-onUnmounted(() => {
-    if (timer) clearInterval(timer);
+// Use computed for real-time synchronization with props.devices
+const displayStats = computed(() => {
+    const all = props.devices || [];
+    // Count any device that has active data flow OR is marked as online/warning
+    // This provides a more robust aggregation and handles dynamic lifecycle states
+    const activeOnes = all.filter(d => 
+        (d.metrics?.throughput > 0) || 
+        ['online', 'warning', 'active', 'authenticating'].includes(d.status || '')
+    );
+    
+    // Sum Mbps throughput directly from metrics
+    const totalMbps = activeOnes.reduce((sum, d) => sum + (d.metrics?.throughput || 0), 0);
+    
+    // Average latency only for nodes with data flow to keep it real
+    const dataFlowingNodes = activeOnes.filter(d => (d.metrics?.throughput || 0) > 0);
+    const totalLat = dataFlowingNodes.reduce((sum, d) => sum + (d.metrics?.latency || 0), 0);
+    
+    const mloCount = all.filter(d => d.linkType === 'MLO-Aggregated').length;
+
+    return {
+        total: all.length,
+        active: activeOnes.length,
+        throughputMbps: totalMbps,
+        avgLatencyMs: dataFlowingNodes.length > 0 ? (totalLat / dataFlowingNodes.length).toFixed(2) : '0.80',
+        mloUsage: all.length > 0 ? Math.round((mloCount / all.length) * 100) : 0
+    };
 });
 </script>
 
 <template>
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div class="bg-slate-800/40 border border-slate-700/50 p-2.5 rounded-lg backdrop-blur-sm">
+    <div class="bg-indigo-500/5 border border-indigo-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 w-12 h-12 bg-indigo-500/10 rounded-full blur-xl"></div>
         <div class="flex items-center gap-2 mb-1">
-            <Cpu class="w-4 h-4 text-sky-400" />
-            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Gateway Engine</span>
+            <Cpu class="w-4 h-4 text-indigo-400" />
+            <span class="text-[10px] uppercase text-indigo-300/60 font-bold tracking-widest">ISA Extensions</span>
         </div>
-        <div class="text-sm font-bold text-sky-200">{{ stats.algorithm }}</div>
-        <div class="text-[9px] text-emerald-400 mt-0.5">Hardware Accelerated</div>
+        <div class="text-sm font-black text-indigo-200 uppercase tracking-tighter">RISC-V Zkn + Zkq</div>
+        <div class="text-[9px] text-indigo-400/80 mt-0.5 font-mono">SM2/3/4 HW-Vectorized</div>
     </div>
     
-    <div class="bg-slate-800/40 border border-slate-700/50 p-2.5 rounded-lg backdrop-blur-sm">
+    <div class="bg-emerald-500/5 border border-emerald-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 w-12 h-12 bg-emerald-500/10 rounded-full blur-xl"></div>
         <div class="flex items-center gap-2 mb-1">
             <Activity class="w-4 h-4 text-emerald-400" />
-            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Active Nodes</span>
+            <span class="text-[10px] uppercase text-emerald-300/60 font-bold tracking-widest">Mesh Status</span>
         </div>
-        <div class="text-sm font-bold text-emerald-200">{{ stats.onlineDevices }} / {{ stats.totalDevices }}</div>
-        <div class="text-[9px] text-slate-400 mt-0.5">Real-time Connection</div>
+        <div class="text-sm font-black text-emerald-200">{{ displayStats.active }} <span class="text-[10px] opacity-60">Nodes Active</span></div>
+        <div class="text-[9px] text-emerald-500/80 mt-0.5">Coverage: {{ displayStats.mloUsage }}% MLO Aggregated</div>
     </div>
 
-    <div class="bg-slate-800/40 border border-slate-700/50 p-2.5 rounded-lg backdrop-blur-sm">
+    <div class="bg-sky-500/5 border border-sky-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 w-12 h-12 bg-sky-500/10 rounded-full blur-xl"></div>
         <div class="flex items-center gap-2 mb-1">
-            <Database class="w-4 h-4 text-amber-400" />
-            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Aggregated Load</span>
+            <Database class="w-4 h-4 text-sky-400" />
+            <span class="text-[10px] uppercase text-sky-300/60 font-bold tracking-widest">Total IOPS</span>
         </div>
-        <div class="text-sm font-mono font-bold text-amber-200">
-            {{ Math.round(stats.totalThroughput) }} <span class="text-[10px] opacity-60">Mbps</span>
+        <div class="text-sm font-mono font-black text-sky-200">
+            {{ (displayStats.throughputMbps / 1024).toFixed(2) }} <span class="text-[10px] opacity-60 uppercase">Gbps</span>
         </div>
-        <div class="text-[9px] text-slate-400 mt-0.5">Avg Latency: {{ avgLatency }}ms</div>
+        <div class="text-[9px] text-sky-500/80 mt-0.5">Avg Latency: {{ displayStats.avgLatencyMs }}ms (E2E)</div>
     </div>
 
-    <div class="bg-slate-800/40 border border-slate-700/50 p-2.5 rounded-lg backdrop-blur-sm">
+    <div class="bg-purple-500/5 border border-purple-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden">
+        <div class="absolute -right-4 -top-4 w-12 h-12 bg-purple-500/10 rounded-full blur-xl"></div>
         <div class="flex items-center gap-2 mb-1">
             <Shield class="w-4 h-4 text-purple-400" />
-            <span class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Security State</span>
+            <span class="text-[10px] uppercase text-purple-300/60 font-bold tracking-widest">Security Audit</span>
         </div>
-        <div class="text-sm font-bold text-purple-200">Active ({{ stats.onlineDevices }} Nodes)</div>
-        <div class="text-[9px] text-purple-400 mt-0.5">Uptime: {{ stats.uptime }}</div>
+        <div class="text-sm font-black text-purple-200 uppercase tracking-tighter">WPA3-EHT Verified</div>
+        <div class="text-[9px] text-purple-400/80 mt-0.5 font-mono">Uptime: {{ displayUptime }}</div>
     </div>
   </div>
 </template>

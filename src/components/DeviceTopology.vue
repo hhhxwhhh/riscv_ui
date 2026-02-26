@@ -187,9 +187,37 @@ watch(
         </div>
 
         <div class="topology-body">
-            <div class="topology-canvas">
+            <div class="topology-canvas relative overflow-hidden bg-slate-900/40 rounded-xl border border-white/5">
+                <!-- Data Flow Legend Overlay -->
+                <div class="absolute bottom-4 left-4 flex flex-wrap gap-2 z-10 pointer-events-none">
+                    <div class="flex items-center gap-2 p-2 bg-slate-950/60 rounded-lg border border-slate-700/40 backdrop-blur-md">
+                        <div class="w-2.5 h-2.5 rounded-sm bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]"></div>
+                        <span class="text-[10px] text-slate-300 font-black uppercase tracking-widest px-1">IoT Sensor</span>
+                    </div>
+                    <div class="flex items-center gap-2 p-2 bg-slate-950/60 rounded-lg border border-slate-700/40 backdrop-blur-md">
+                        <div class="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
+                        <span class="text-[10px] text-slate-300 font-black uppercase tracking-widest px-1">4K Camera</span>
+                    </div>
+                    <div class="flex items-center gap-2 p-2 bg-slate-950/60 rounded-lg border border-slate-700/40 backdrop-blur-md">
+                        <div class="w-3 h-3 rotate-45 border-2 border-amber-400 bg-amber-400/20 shadow-[0_0_8px_rgba(fbbf24,0.5)]"></div>
+                        <span class="text-[10px] text-slate-300 font-black uppercase tracking-widest px-1">Mesh Relay</span>
+                    </div>
+                    <div class="flex items-center gap-2 p-2 bg-slate-950/60 rounded-lg border border-slate-700/40 backdrop-blur-md">
+                        <div class="w-3 h-3 rounded-sm border-2 border-indigo-400 bg-indigo-500/20"></div>
+                        <span class="text-[10px] text-slate-300 font-black uppercase tracking-widest px-1">User Terminal</span>
+                    </div>
+                </div>
+                
                 <div ref="chartRef" class="w-full h-full"></div>
-                <div class="canvas-hint">Hover to View Labels • Click Nodes to Select</div>
+                
+                <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
+                    <div class="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 rounded border border-emerald-500/30">
+                        <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></div>
+                        <span class="text-[9px] text-emerald-400 font-mono font-bold tracking-tighter">WPA3-EHT ACTIVE</span>
+                    </div>
+                </div>
+                
+                <div class="canvas-hint">Interactive Mesh: Drag or Click to Zoom • Nodes with Glow are Transmitting</div>
             </div>
 
             <div class="topology-side">

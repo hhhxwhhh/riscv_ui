@@ -1,6 +1,6 @@
 import * as echarts from 'echarts';
 import { type NodeData, THEME } from './DeviceTopology.types';
-import { getStageContext, getGatewayColor } from './DeviceTopology.helpers';
+import { getStageContext, getGatewayColor, getNodeSymbol } from './DeviceTopology.helpers';
 import { STAGES } from '../api/stages';
 
 // --- Helper Functions for Data Preparation ---
@@ -76,8 +76,8 @@ const calculateFlowLines = (
             if (sPos && tPos) {
                 const tput = node.throughput || 100;
                 // Dynamic opacity: near transparent on low traffic, bright on high
-                const activeOpacity = Math.max(0.6, Math.min(1.0, tput / 800));
-                const flowOpacity = isActive ? activeOpacity : 0.05;
+                const activeOpacity = Math.max(0.6, Math.min(1.0, 0.4 + (tput / 1200)));
+                const flowOpacity = isActive ? activeOpacity : 0.08;
                 
                 const ctx = getStageContext(sid);
                 const stageLines = linesByStage[sid] || (linesByStage[sid] = []);
@@ -90,7 +90,13 @@ const calculateFlowLines = (
                     const gx = gatewayNode.x, gy = gatewayNode.y; 
                     stageLines.push({
                         coords: [[gx, gy], [gx + 35, gy - 45], [gx + 70, gy], [gx + 35, gy + 45], [gx, gy]],
-                        lineStyle: { width: lineWidth, opacity: flowOpacity, color: ctx.color },
+                        lineStyle: { 
+                            width: lineWidth, 
+                            opacity: flowOpacity, 
+                            color: ctx.color, 
+                            shadowBlur: 10,
+                            shadowColor: ctx.color 
+                        },
                         sourceName: 'Gateway Engine', targetName: 'HW Accelerator',
                         stageName: ctx.text, throughput: tput
                     });
@@ -102,7 +108,9 @@ const calculateFlowLines = (
                             width: lineWidth,
                             curveness: isRelayMode ? (node.name === nodeB ? -0.25 : 0.25) : curve,
                             opacity: flowOpacity,
-                            color: ctx.color
+                            color: ctx.color,
+                            shadowBlur: isActive ? 6 : 0,
+                            shadowColor: ctx.color
                         },
                         sourceName: source, targetName: target,
                         stageName: ctx.text, throughput: tput
@@ -121,13 +129,12 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
     const gateway = nodes.find(n => n.category === 'gateway');
     if (!gateway || isLargeMode) return [];
 
-    const maxTput = 5000;
-    const intensity = Math.min(1.2, throughput / maxTput); // Allow slight over-intensity for visual impact
     const color = getGatewayColor(throughput);
     
     // Extract RGB for rgba construction
-    const rgb = color.match(/\d+/g)?.map(Number) || [255, 100, 100];
-    const alpha = 0.15 + 0.25 * intensity;
+    const rgb = color.match(/\d+/g)?.map(Number) || [125, 211, 252];
+    const intensity = Math.min(1.0, throughput / 5000);
+    const alpha = 0.2 + 0.3 * intensity;
 
     return [
         {
@@ -136,38 +143,36 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             coordinateSystem: 'cartesian2d',
             silent: true,
             data: [{ value: [gateway.x, gateway.y] }],
-            symbolSize: 80 + 40 * intensity,
+            symbolSize: 75 + 35 * intensity,
             rippleEffect: { 
-                brushType: 'stroke', 
-                scale: 2.2 + 0.8 * intensity, 
-                period: Math.max(1.5, 4 - 2.5 * intensity), 
-                color: color 
+                brushType: 'fill', 
+                scale: 2.5 + 1.0 * intensity, 
+                period: Math.max(1.8, 4.5 - 3 * intensity), 
+                color: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.4)` 
             },
             itemStyle: { 
                 color: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`, 
-                shadowBlur: 30 + 30 * intensity, 
+                shadowBlur: 40 + 40 * intensity, 
                 shadowColor: color 
             },
             z: 0
         },
         {
             type: 'effectScatter',
-            name: 'GatewayPulseOuter',
+            name: 'GatewayPulseInner',
             coordinateSystem: 'cartesian2d',
             silent: true,
             data: [{ value: [gateway.x, gateway.y] }],
-            symbolSize: 110 + 50 * intensity,
+            symbolSize: 30 + 15 * intensity,
             rippleEffect: { 
                 brushType: 'stroke', 
-                scale: 3.2 + 1.2 * intensity, 
-                period: Math.max(2, 6 - 3 * intensity), 
+                scale: 4 + 2 * intensity, 
+                period: 3, 
                 color: color 
             },
             itemStyle: { 
-                color: 'transparent', 
-                borderColor: color, 
-                borderWidth: 1.5, 
-                opacity: 0.2 + (0.2 * intensity) 
+                color: color, 
+                opacity: 0.8 
             },
             z: 0
         }
@@ -203,12 +208,14 @@ const buildFlowLayer = (
                 avgTput = activeNodes.reduce((sum, n) => sum + n.throughput, 0) / activeNodes.length;
             }
         } else {
+             // Use throughput for individual link speed
              avgTput = lines[0]?.throughput || 50; 
         }
         
-        const period = Math.max(1.5, Math.min(6, 8 - (avgTput / 200)));
-        const symbolSize = isGlobal ? Math.max(4, Math.min(8, 3 + (avgTput / 300))) : Math.max(6, Math.min(12, 5 + (avgTput / 200)));
-        const trailLength = Math.max(0.3, Math.min(0.8, 0.4 + (avgTput / 1200)));
+        // Scale animation parameters based on Mbps (up to ~3000-4000 Mbps)
+        const period = Math.max(0.2, Math.min(6, 6 - (avgTput / 800)));
+        const symbolSize = isGlobal ? Math.max(4, Math.min(10, 3 + (avgTput / 1200))) : Math.max(6, Math.min(14, 5 + (avgTput / 1000)));
+        const trailLength = Math.max(0.1, Math.min(0.9, 0.2 + (avgTput / 4000)));
 
         const lineBase = {
             type: useGpuRendering ? 'linesGL' : 'lines',
@@ -254,15 +261,39 @@ const buildNodeLayer = (
         type: 'scatter',
         name: 'GLNodes',
         coordinateSystem: 'cartesian2d',
-        symbol: 'circle',
-        label: { show: false }, // Ensure labels are hidden by default
+        
+        symbol: (_value: any, params: any) => {
+            const node = params?.data || {};
+            return getNodeSymbol(node.name || '');
+        },
 
         symbolSize: (value: number[], params: any) => {
             const node = params?.data || {};
-            if (node.category === 'gateway') return 26;
+            if (node.category === 'gateway') return 32;
+            const isSelected = selectedNames.includes(node.name);
             const isActive = !!node.isBlinking || (value?.[2] || 0) > 0;
-            return isActive ? 13 : 9;
+            if (isSelected) return 18;
+            return isActive ? 14 : 10;
         },
+
+        label: {
+            show: true,
+            position: 'bottom',
+            distance: 8,
+            formatter: (params: any) => {
+                const node = params.data;
+                const isSelected = selectedNames.includes(node.name);
+                if (isSelected || node.category === 'gateway') return node.name;
+                return '';
+            },
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: 'bold',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            padding: [2, 4],
+            borderRadius: 4
+        },
+
         data: nodes.map(node => {
             const isGateway = node.category === 'gateway';
             const isSelected = selectedNames.includes(node.name);
@@ -281,7 +312,11 @@ const buildNodeLayer = (
                 value: [node.x, node.y, node.throughput || 0],
                 itemStyle: {
                     color,
-                    opacity: isGateway ? 0.95 : (isActive || isSelected ? 0.9 : 0.45)
+                    opacity: isGateway ? 1.0 : (isActive || isSelected ? 0.95 : 0.4),
+                    shadowBlur: (isActive || isSelected) ? 12 : 0,
+                    shadowColor: color,
+                    borderColor: isSelected ? '#fff' : 'transparent',
+                    borderWidth: isSelected ? 1 : 0
                 }
             };
         }),
