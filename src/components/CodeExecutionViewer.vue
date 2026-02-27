@@ -360,6 +360,11 @@ const copyCode = async () => {
                                                 <div class="text-amber-500 font-bold font-mono">Medium</div>
                                             </div>
                                         </div>
+                                        <button @click="showFullCode = true" 
+                                            class="mt-3 w-full py-1.5 border border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/15 rounded flex items-center justify-center gap-2 text-[10px] text-sky-400 font-bold tracking-widest uppercase transition-all">
+                                            <FileCode class="w-3.5 h-3.5" />
+                                            Explore Complete Source Code
+                                        </button>
                                     </div>
                                 </div>
                             </div>

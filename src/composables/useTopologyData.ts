@@ -48,7 +48,9 @@ export function useTopologyData(
         const previousState = new Map(nodes.value.map((node) => [node.name, {
             isBlinking: node.isBlinking,
             throughput: node.throughput,
-            stageId: node.stageId
+            stageId: node.stageId,
+            latency: node.latency,
+            securityScore: node.securityScore
         }]));
 
         const gatewayName = 'A100 Gateway';
@@ -97,7 +99,9 @@ export function useTopologyData(
                 isBlinking: prevState?.isBlinking || false,
                 // Default to 'AUTH' if no previous state, avoid assigning random stages
                 stageId: prevState?.stageId || 'AUTH',
-                throughput: prevState?.throughput || defaultTput
+                throughput: prevState?.throughput || defaultTput,
+                latency: prevState?.latency,
+                securityScore: prevState?.securityScore
             };
         });
 
@@ -143,10 +147,9 @@ export function useTopologyData(
 
             if (packet.metrics && typeof packet.metrics === 'object') {
                 const m = packet.metrics as any;
-                if (m.throughput) {
-                    // Use actual Mbps value for sidebar display
-                    targetNode.throughput = Number(m.throughput);
-                }
+                if (m.throughput) targetNode.throughput = Number(m.throughput);
+                if (m.latency) targetNode.latency = Number(m.latency);
+                if (m.securityScore) targetNode.securityScore = Number(m.securityScore);
             }
 
             targetNode.isBlinking = true;
@@ -160,6 +163,8 @@ export function useTopologyData(
                 if (isDisposed) return;
                 targetNode.isBlinking = false;
                 targetNode.throughput = 0;
+                targetNode.latency = undefined;
+                targetNode.securityScore = undefined;
                 throttledTriggerRender();
                 blinkTimeouts.delete(targetNode.name);
             }, clearDelay);

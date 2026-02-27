@@ -20,6 +20,8 @@ export type NodeData = {
     isBlinking: boolean;
     stageId: string;
     throughput: number;
+    latency?: number;
+    securityScore?: number;
     description?: string;
 };
 

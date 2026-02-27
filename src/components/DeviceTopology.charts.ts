@@ -277,21 +277,7 @@ const buildNodeLayer = (
         },
 
         label: {
-            show: true,
-            position: 'bottom',
-            distance: 8,
-            formatter: (params: any) => {
-                const node = params.data;
-                const isSelected = selectedNames.includes(node.name);
-                if (isSelected || node.category === 'gateway') return node.name;
-                return '';
-            },
-            color: '#fff',
-            fontSize: 10,
-            fontWeight: 'bold',
-            backgroundColor: 'rgba(15, 23, 42, 0.6)',
-            padding: [2, 4],
-            borderRadius: 4
+            show: false,
         },
 
         data: nodes.map(node => {
@@ -324,37 +310,19 @@ const buildNodeLayer = (
     }];
 };
 
-const buildInteractionLayer = (nodes: NodeData[], isLargeMode: boolean) => {
-    if (isLargeMode) return [];
-    
+const buildInteractionLayer = (nodes: NodeData[], gatewayThroughput: number, currentStageId: string) => {
     return [{
         name: 'InteractionLayer',
-        type: 'graph',
+        type: 'scatter',
         coordinateSystem: 'cartesian2d',
-        layout: 'none',
+        silent: false,
         cursor: 'pointer',
-        symbolSize: 40, // Reduced from 60 to be more precise
-        itemStyle: { opacity: 0 }, 
-        label: { 
-            show: false // Hide labels by default
-        },
-        emphasis: {
-            label: {
-                show: true, // Show labels only on hover
-                position: 'top',
-                formatter: '{b}',
-                color: '#7dd3fc',
-                fontSize: 11,
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(15, 23, 42, 0.7)',
-                padding: [4, 8],
-                borderRadius: 4,
-                distance: 10
-            }
-        },
+        symbolSize: 40,
+        itemStyle: { color: 'transparent' }, 
         data: nodes.map(n => ({
+            ...n,
             name: n.name,
-            value: [n.x, n.y, n.value]
+            value: [n.x, n.y, n.throughput || 0]
         })),
         z: 10
     }];
@@ -393,7 +361,7 @@ export const buildChartOption = (
         // buildBackgroundLayer removed for cleanliness/simplicity in redraw
         ...buildFlowLayer(linesByStage, useGpuRendering, isGlobal, nodes),
         ...buildNodeLayer(nodes, selectedNames, viewMode, stageId, displayGatewayThroughput, gatewaySvgRaw, useGpuRendering, isRelayMode),
-        ...buildInteractionLayer(nodes, useGpuRendering)
+        ...buildInteractionLayer(nodes, displayGatewayThroughput, stageId)
     ];
 
     // 4. Construct Option
@@ -439,7 +407,7 @@ export const buildChartOption = (
                                 `Throughput: ${Math.round(displayGatewayThroughput)} Mbps`,
                                 `Processing Rate: ${(displayGatewayThroughput / 8).toFixed(1)} MB/s`,
                                 `GATEWAY SPEEDUP: ${(displayGatewayThroughput / 800).toFixed(1)}x`,
-                                `STATUS: LIVE-STREAMING`,
+                                `MODE: SECURITY-${stageId}`,
                                 `RISC-V: HARDWARE-ACCEL`,
                             ].join('\n'),
                             fill: '#94a3b8', font: '12px monospace', lineHeight: 18
@@ -451,8 +419,10 @@ export const buildChartOption = (
         ],
         tooltip: {
             trigger: 'item',
-            backgroundColor: 'rgba(17, 24, 39, 0.95)',
-            borderColor: THEME.grid,
+            backgroundColor: 'transparent',
+            borderColor: 'transparent',
+            padding: 0,
+            shadowBlur: 0,
             textStyle: { color: '#f3f4f6' },
             formatter: (params: any) => {
                 if (params.seriesType === 'lines' || params.seriesType === 'linesGL') {
@@ -476,17 +446,47 @@ export const buildChartOption = (
                         const ctx = getStageContext(node.stageId || 'AUTH');
                         const isActive = node.isBlinking || node.throughput > 0;
                         const tput = isGateway ? displayGatewayThroughput : node.throughput;
-                        const statusText = isActive ? 'Active' : 'Idle';
+                        const statusText = isActive ? 'ACTIVE' : 'IDLE';
                         const statusColor = isActive ? '#34d399' : '#94a3b8';
 
-                        return `
-                        <div class="px-3 py-2 font-mono text-xs">
-                            <div class="border-b border-gray-600 pb-1 mb-2 font-bold text-sky-400">${node.name}</div>
-                            <div>IP: ${node.value}</div>
-                            <div>Stage: <span style="color:${ctx.color}">${ctx.text}</span></div>
-                            <div>Status: <span style="color:${statusColor}">${statusText}</span></div>
-                            <div>Throughput: ${Math.round(tput || 0)} Mbps</div>
-                        </div>`;
+                        let html = `
+                        <div class="px-4 py-3 font-mono text-xs bg-slate-900/90 border border-sky-500/30 rounded-lg shadow-xl backdrop-blur-md">
+                            <div class="border-b border-sky-500/20 pb-2 mb-2 flex justify-between items-center gap-4">
+                                <span class="font-bold text-sky-400 text-sm tracking-tight">${node.name}</span>
+                                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] text-slate-400 border border-slate-700">NODE</span>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div class="flex justify-between gap-6">
+                                    <span class="text-slate-500">IP ADDRESS</span>
+                                    <span class="text-slate-300">192.168.1.${node.name.split('-').pop()}</span>
+                                </div>
+                                <div class="flex justify-between gap-6">
+                                    <span class="text-slate-500">SECURITY STAGE</span>
+                                    <span style="color:${ctx.color}" class="font-bold">${ctx.text}</span>
+                                </div>
+                                <div class="flex justify-between gap-6">
+                                    <span class="text-slate-500">STATE</span>
+                                    <span style="color:${statusColor}" class="font-bold tracking-widest">${statusText}</span>
+                                </div>
+                                <div class="flex justify-between gap-6 pt-1 border-t border-slate-800">
+                                    <span class="text-slate-500 uppercase">Throughput</span>
+                                    <span class="text-teal-400 font-bold">${Math.round(tput || 0)} Mbps</span>
+                                </div>`;
+                                
+                        if (isActive && node.latency) {
+                            html += `
+                                <div class="flex justify-between gap-6">
+                                    <span class="text-slate-500 uppercase">Latency</span>
+                                    <span class="text-amber-400 font-bold">${node.latency.toFixed(2)} ms</span>
+                                </div>
+                                <div class="flex justify-between gap-6">
+                                    <span class="text-slate-500 uppercase">Security</span>
+                                    <span class="text-emerald-400 font-bold">${node.securityScore || 100}%</span>
+                                </div>`;
+                        }
+
+                        html += `</div></div>`;
+                        return html;
                     }
 
                     return `<div class="px-3 py-2 font-mono text-xs font-bold">${params.name}</div>`;  
