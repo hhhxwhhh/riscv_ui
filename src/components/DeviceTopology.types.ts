@@ -3,6 +3,7 @@ export type DeviceInfo = {
     name: string;
     ip: string;
     status?: string;
+    deviceType?: 'sensor' | 'camera' | 'industrial' | 'relay' | 'terminal' | 'gateway';
     metrics?: {
         throughput: number;
         latency: number;
@@ -17,6 +18,7 @@ export type NodeData = {
     y: number;
     value: string;
     category: string;
+    deviceType?: string;
     isBlinking: boolean;
     stageId: string;
     throughput: number;

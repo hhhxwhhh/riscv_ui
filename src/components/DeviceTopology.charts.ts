@@ -265,6 +265,17 @@ const buildNodeLayer = (
         
         symbol: (_value: any, params: any) => {
             const node = params?.data || {};
+            // Prefer deviceType if available, otherwise fallback to name-based symbol
+            if (node.deviceType) {
+                switch(node.deviceType.toLowerCase()) {
+                    case 'gateway': return 'roundRect';
+                    case 'sensor': return 'diamond';
+                    case 'camera': return 'rect';
+                    case 'terminal': return 'pin';
+                    case 'relay': return 'triangle';
+                    case 'industrial': return 'rect';
+                }
+            }
             return getNodeSymbol(node.name || '');
         },
 

@@ -19,11 +19,11 @@ ws.on("open", () => {
     const ip = `192.168.1.${50 + i}`;
 
     // 启动每个设备的独立逻辑，但共享同一个 ws 连接
-    startDeviceLifecycle(id, name, ip);
+    startDeviceLifecycle(id, name, ip, type);
   }
 });
 
-function startDeviceLifecycle(deviceId, deviceName, ip) {
+function startDeviceLifecycle(deviceId, deviceName, ip, type) {
   let currentStageIdx = 0;
 
   const sendNext = () => {
@@ -36,6 +36,7 @@ function startDeviceLifecycle(deviceId, deviceName, ip) {
       type: "telemetry",
       deviceId: deviceId,
       deviceName: deviceName,
+      deviceType: type.toLowerCase(),
       source: ip,
       status: "active",
       stageId: stageId,

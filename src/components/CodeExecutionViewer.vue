@@ -136,25 +136,25 @@ const copyCode = async () => {
                     </div>
                 </div>
             </div>
-            <div class="flex items-center gap-3">
-                <div class="flex bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60">
+            <div class="flex items-center gap-4">
+                <div class="flex bg-slate-800/80 rounded-lg p-1 border border-slate-700/60 shadow-inner">
                     <button v-for="type in customTypes" :key="type.key" @click="selectedType = type.key"
-                        :class="selectedType === type.key ? 'bg-sky-500 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200'"
-                        class="px-3 py-1 rounded-md text-[10px] font-bold transition-all whitespace-nowrap">
+                        :class="selectedType === type.key ? 'bg-sky-500 text-white shadow-md' : 'text-gray-400 hover:text-gray-200'"
+                        class="px-4 py-1.5 rounded-md text-[11px] font-bold transition-all whitespace-nowrap">
                         {{ type.label }}
                     </button>
                 </div>
                 <button @click="showFullCode = true"
-                    class="flex items-center gap-2 px-3 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-semibold">
+                    class="flex items-center gap-2 px-4 py-1.5 rounded bg-sky-500/10 text-sky-400 border border-sky-400/30 hover:bg-sky-500/20 transition-colors text-xs font-bold whitespace-nowrap">
                     <FileCode class="w-4 h-4" />
-                    View Source
+                    Source Code
                 </button>
             </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 flex-1 overflow-hidden relative group">
+        <div class="grid grid-cols-2 gap-6 flex-1 overflow-hidden relative group">
             <!-- Terminal Scanline Effect -->
-            <div class="absolute inset-0 pointer-events-none z-10 opacity-[0.03] overflow-hidden rounded-lg">
+            <div class="absolute inset-0 pointer-events-none z-10 opacity-[0.04] overflow-hidden rounded-xl">
                 <div
                     class="w-full h-[200%] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] animate-scan">
                 </div>
@@ -242,21 +242,19 @@ const copyCode = async () => {
                 </div>
             </transition>
 
-            <!-- Left: Standard Instruction Stream (Legacy) -->
-            <div class="flex flex-col border-r border-gray-700/80 pr-2">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-[13px] font-bold text-gray-400 uppercase tracking-wider">
-                        Standard RISC-V Stream
+            <!-- Left: Standard Instruction Stream (Baseline) -->
+            <div class="flex flex-col border-r border-gray-700/50 pr-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-[12px] font-black text-gray-400 uppercase tracking-widest">
+                        Baseline Stream
                     </h3>
-                    <div class="flex gap-2">
-                        <span
-                            class="text-[10px] text-rose-500 font-mono bg-rose-500/5 px-1.5 py-0.5 rounded border border-rose-500/20">
-                            Σ {{ standardInstructions.length * 2 }} CYCLES
-                        </span>
+                    <div
+                        class="text-[10px] text-rose-400 font-bold font-mono bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                        Σ {{ standardInstructions.length * 2 }} CYCLES
                     </div>
                 </div>
                 <div
-                    class="flex-1 font-mono text-sm bg-slate-950/20 border border-white/5 p-0 rounded relative overflow-hidden">
+                    class="flex-1 font-mono text-sm bg-slate-950/40 border border-white/5 p-0 rounded-xl relative overflow-hidden shadow-inner font-instruction">
                     <!-- Benchmark heatmap background -->
                     <div class="absolute right-0 top-0 bottom-0 w-1 bg-slate-800/10 z-0">
                         <div v-for="(_, sIdx) in standardInstructions" :key="'heat-' + sIdx" class="w-full"
@@ -265,113 +263,107 @@ const copyCode = async () => {
                         </div>
                     </div>
 
-                    <div class="absolute inset-0 overflow-y-auto p-2 custom-scrollbar">
+                    <div class="absolute inset-0 overflow-y-auto p-3 custom-scrollbar">
                         <div v-for="(inst, sIdx) in standardInstructions" :key="'std-' + sIdx"
-                            class="py-0.5 px-2 mb-px rounded transition-all duration-300 cursor-default flex items-center text-[13px] relative z-10"
+                            class="py-1 px-2 mb-0.5 rounded transition-all duration-300 cursor-default flex items-center text-[12px] relative z-10"
                             :class="{
-                                'bg-rose-500/15 text-rose-200 border-l-2 border-rose-500 shadow-[2px_0_10px_rgba(244,63,94,0.05)]': hoveredCustomIdx !== null && customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
-                                'text-slate-500 opacity-40 grayscale': hoveredCustomIdx !== null && !customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
+                                'bg-rose-500/15 text-rose-100 border-l-2 border-rose-500 shadow-[2px_0_10px_rgba(244,63,94,0.05)] font-bold': hoveredCustomIdx !== null && customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
+                                'text-slate-600 opacity-30 grayscale blur-[0.2px]': hoveredCustomIdx !== null && !customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
                                 'text-slate-400 hover:text-slate-200': hoveredCustomIdx === null
                             }">
-                            <div class="w-6 text-[10px] text-gray-600 select-none mr-2 text-right">{{ (sIdx +
+                            <div class="w-6 text-[10px] text-gray-700 select-none mr-3 text-right font-mono">{{ (sIdx +
                                 1).toString().padStart(2, '0') }}</div>
-                            <div class="truncate flex-1">{{ inst }}</div>
+                            <div class="truncate flex-1 tracking-tight">{{ inst }}</div>
                             <div v-if="hoveredCustomIdx === null || customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx)"
-                                class="text-[9px] font-mono opacity-30 ml-2">2c</div>
+                                class="text-[9px] font-mono opacity-20 ml-3">2c</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right: Custom Instruction Type Selection & List -->
-            <div class="flex flex-col pl-2">
-                <div class="flex items-center justify-between mb-2">
+            <!-- Right: HW Accelerated Stream -->
+            <div class="flex flex-col pl-4">
+                <div class="flex items-center justify-between mb-3">
                     <div class="flex gap-2">
                         <button v-for="type in customTypes" :key="type.key"
                             @click="selectedType = type.key; selectedCustomIdx = null"
-                            :class="selectedType === type.key ? 'bg-teal-500/20 text-teal-400 font-bold border-teal-500/40' : 'bg-slate-800/50 text-gray-500 border-transparent hover:text-gray-300'"
-                            class="px-2 py-1 rounded border transition-all text-[11px] uppercase tracking-wider">
+                            :class="selectedType === type.key ? 'bg-teal-500/30 text-teal-300 font-bold border-teal-500/50' : 'bg-slate-800/40 text-gray-500 border-transparent hover:text-gray-300'"
+                            class="px-2.5 py-1.5 rounded-lg border transition-all text-[11px] uppercase tracking-wider">
                             {{ type.label }}
                         </button>
                     </div>
                     <div
-                        class="text-[10px] font-mono text-teal-500/70 bg-teal-500/5 px-2 py-0.5 rounded border border-teal-500/20">
+                        class="text-[10px] font-black font-mono text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
                         Σ {{customInstructions.filter(i => !i.text.startsWith('#')).length * 5}} CYCLES
                     </div>
                 </div>
 
                 <div
-                    class="flex-1 font-mono text-sm bg-slate-950/20 border border-white/5 p-0 rounded relative overflow-hidden flex flex-col">
-                    <div class="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                    class="flex-1 font-mono text-sm bg-slate-950/40 border border-white/5 p-0 rounded-xl relative overflow-hidden flex flex-col shadow-inner font-instruction">
+                    <div class="flex-1 overflow-y-auto p-3 custom-scrollbar">
                         <div v-for="(item, idx) in customInstructions" :key="'cust-' + idx"
-                            class="relative p-3 mb-2 rounded border transition-all duration-500 group cursor-pointer overflow-hidden"
+                            class="relative mb-2 rounded-xl border transition-all duration-300 group cursor-pointer overflow-hidden"
                             @mouseenter="handleCustomHover(idx)" @mouseleave="handleCustomHover(null)"
                             @click="selectedCustomIdx = idx" :class="{
-                                'bg-teal-500/10 border-teal-500/40 shadow-[0_0_20px_rgba(20,184,166,0.15)] ring-1 ring-teal-500/30': idx === selectedCustomIdx || hoveredCustomIdx === idx,
-                                'bg-slate-800/30 border-slate-700/40 hover:bg-slate-800/60': idx !== selectedCustomIdx && hoveredCustomIdx !== idx,
-                                'opacity-30 blur-[0.5px] scale-[0.98]': hoveredCustomIdx !== null && hoveredCustomIdx !== idx
+                                'bg-teal-500/10 border-teal-500/40 shadow-[0_0_20px_rgba(20,184,166,0.1)]': idx === selectedCustomIdx || hoveredCustomIdx === idx,
+                                'bg-slate-900/40 border-slate-800/60 hover:border-slate-700': idx !== selectedCustomIdx && hoveredCustomIdx !== idx,
+                                'opacity-40 grayscale-[0.5]': hoveredCustomIdx !== null && hoveredCustomIdx !== idx
                             }">
 
-            <!-- Instruction acceleration scan effect -->
-                            <div v-if="hoveredCustomIdx === idx"
-                                class="absolute inset-0 bg-gradient-to-r from-transparent via-teal-500/10 to-transparent -translate-x-full animate-pulse-horizontal pointer-events-none">
-                            </div>
-
-                            <!-- Badge showing compression ratio -->
-                            <div class="absolute top-2 right-2 z-10" v-if="!item.text.startsWith('#')">
-                                <div class="flex flex-col items-end gap-1">
-                                    <span
-                                        class="bg-slate-900/80 text-[9px] text-teal-400 px-1.5 py-0.5 rounded border border-teal-500/30 font-bold">
-                                        {{ item.mappedStandardIdxs.length }}:1 MAPPING
-                                    </span>
-                                    <span class="text-[8px] text-sky-500/50 font-mono">LATENCY: 5c</span>
-                                </div>
-                            </div>
-
-                            <div class="flex items-start gap-3 relative z-10">
-                                <div class="text-[10px] select-none pt-0.5 font-mono"
-                                    :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'text-teal-400' : 'text-gray-600'">
-                                    0x{{ (idx * 4).toString(16).toUpperCase().padStart(2, '0') }}
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <div class="font-bold text-sm tracking-tight transition-colors"
-                                        :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'text-teal-300' : 'text-slate-300 italic opacity-80'">
-                                        {{ item.text }}
+                            <div class="p-3 relative z-10">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                                        <div class="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-500"
+                                            :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.6)] animate-pulse' : 'bg-slate-700'">
+                                        </div>
+                                        <div class="font-bold text-[12px] leading-tight tracking-tight truncate transition-colors"
+                                            :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'text-teal-300' : 'text-slate-300'">
+                                            {{ item.text }}
+                                        </div>
                                     </div>
 
-                                    <!-- Expanded detail area -->
-                                    <div v-if="idx === selectedCustomIdx || hoveredCustomIdx === idx"
-                                        class="mt-3 text-[11px] text-slate-400 border-t border-teal-500/20 pt-2 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-300">
+                                    <div class="flex items-center gap-2 flex-shrink-0">
+                                        <span class="text-[9px] font-mono text-slate-500 tabular-nums">5c</span>
                                         <div
-                                            class="flex items-center gap-2 mb-2 text-[10px] text-teal-500/70 font-bold letter-spacing-wide">
-                                            <div class="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></div>
-                                            HARDWARE LOGIC MAPPING
+                                            class="bg-rose-500/15 border border-rose-500/30 text-rose-400 px-1.5 py-0.5 rounded-md text-[9px] font-black shadow-sm flex items-center gap-1">
+                                            <Zap class="w-2.5 h-2.5" />
+                                            MAPPED:{{ item.mappedStandardIdxs.length }}
                                         </div>
-                                        <p class="mb-2 text-slate-400/90 leading-tight">
-                                            {{ item.detail || 'Optimized hardware implementation.' }}
+                                    </div>
+                                </div>
+
+                                <!-- Expanded detail area -->
+                                <transition name="fade">
+                                    <div v-if="idx === selectedCustomIdx"
+                                        class="mt-3 text-[11px] text-slate-400 border-t border-teal-500/20 pt-3 leading-relaxed">
+                                        <p class="mb-3 text-slate-400/90 italic">
+                                            {{ item.detail || 'Accelerated cryptographic hardware primitive.' }}
                                         </p>
-                                        <div class="grid grid-cols-2 gap-2 text-[10px]">
-                                            <div class="bg-black/20 p-1.5 rounded border border-white/5">
-                                                <div class="text-gray-500 mb-0.5">Throughput</div>
-                                                <div class="text-teal-400 font-bold font-mono">1 Ops/Cycle</div>
+                                        <div class="grid grid-cols-2 gap-3 mb-3">
+                                            <div class="bg-black/40 p-2 rounded-lg border border-white/5">
+                                                <div class="text-[9px] text-slate-500 uppercase font-black mb-1">
+                                                    Throughput</div>
+                                                <div class="text-teal-400 font-mono font-bold">1 Ops/Cyc</div>
                                             </div>
-                                            <div class="bg-black/20 p-1.5 rounded border border-white/5">
-                                                <div class="text-gray-500 mb-0.5">Area Cost</div>
-                                                <div class="text-amber-500 font-bold font-mono">Medium</div>
+                                            <div class="bg-black/40 p-2 rounded-lg border border-white/5">
+                                                <div class="text-[9px] text-slate-500 uppercase font-black mb-1">Area
+                                                    Cost</div>
+                                                <div class="text-amber-500 font-mono font-bold">Low-Latency</div>
                                             </div>
                                         </div>
-                                        <button @click="showFullCode = true" 
-                                            class="mt-3 w-full py-1.5 border border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/15 rounded flex items-center justify-center gap-2 text-[10px] text-sky-400 font-bold tracking-widest uppercase transition-all">
-                                            <FileCode class="w-3.5 h-3.5" />
-                                            Explore Complete Source Code
+                                        <button @click.stop="showFullCode = true"
+                                            class="w-full py-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 rounded-lg flex items-center justify-center gap-2 text-[10px] text-sky-400 font-black uppercase tracking-widest transition-all">
+                                            <FileCode class="w-4 h-4" />
+                                            View Logic
                                         </button>
                                     </div>
-                                </div>
+                                </transition>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 </template>

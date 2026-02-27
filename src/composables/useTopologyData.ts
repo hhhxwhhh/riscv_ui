@@ -51,7 +51,8 @@ export function useTopologyData(
             throughput: node.throughput,
             stageId: node.stageId,
             latency: node.latency,
-            securityScore: node.securityScore
+            securityScore: node.securityScore,
+            deviceType: node.deviceType
         }]));
 
         const gatewayName = 'A100 Gateway';
@@ -74,12 +75,13 @@ export function useTopologyData(
         
         const layout = calculateTopologyLayout(w, h, deviceList.length);
 
-        const gateway = {
+        const gateway: NodeData = {
             name: gatewayName,
             x: layout.gateway.x,
             y: layout.gateway.y,
             value: '192.168.1.1',
             category: 'gateway',
+            deviceType: 'gateway',
             isBlinking: previousState.get(gatewayName)?.isBlinking || false,
             stageId: currentStageId.value || 'AUTH',
             throughput: previousState.get(gatewayName)?.throughput || 100,
@@ -97,6 +99,7 @@ export function useTopologyData(
                 y: pos.y,
                 value: device.ip,
                 category: 'device',
+                deviceType: device.deviceType || prevState?.deviceType || 'generic',
                 isBlinking: prevState?.isBlinking || false,
                 // Default to 'AUTH' if no previous state, avoid assigning random stages
                 stageId: prevState?.stageId || 'AUTH',
@@ -151,6 +154,17 @@ export function useTopologyData(
                 if (m.throughput) targetNode.throughput = Number(m.throughput);
                 if (m.latency) targetNode.latency = Number(m.latency);
                 if (m.securityScore) targetNode.securityScore = Number(m.securityScore);
+            }
+
+            if (packet.deviceType) {
+                targetNode.deviceType = packet.deviceType;
+            } else if (!targetNode.deviceType && targetNode.name) {
+                const name = targetNode.name.toLowerCase();
+                if (name.includes('sensor')) targetNode.deviceType = 'sensor';
+                else if (name.includes('camera')) targetNode.deviceType = 'camera';
+                else if (name.includes('terminal')) targetNode.deviceType = 'terminal';
+                else if (name.includes('relay')) targetNode.deviceType = 'relay';
+                else if (name.includes('industrial')) targetNode.deviceType = 'industrial';
             }
 
             targetNode.isBlinking = true;

@@ -142,12 +142,13 @@ const handleTelemetry = (packet: any) => {
       }
     } else if (packet.type === 'telemetry') {
       // Dynamic device creation on first telemetry if not exists
-      const newDev = {
+      const newDev: any = {
         id: packet.deviceId || `dev-${Date.now()}`,
         name: packet.deviceName || packet.deviceId || 'Unknown Device',
         ip: packet.source || '0.0.0.0',
         status: packet.status || 'online',
         stageId: packet.stageId || 'AUTH',
+        deviceType: packet.deviceType,
         metrics: {
           throughput: Number(packet.metrics?.throughput ?? 0),
           latency: Number(packet.metrics?.latency ?? 0),
