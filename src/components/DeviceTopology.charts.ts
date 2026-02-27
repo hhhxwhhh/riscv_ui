@@ -261,6 +261,7 @@ const buildNodeLayer = (
         type: 'scatter',
         name: 'GLNodes',
         coordinateSystem: 'cartesian2d',
+        silent: true, // Make visual nodes silent to let interaction layer handle clicks/hovers
         
         symbol: (_value: any, params: any) => {
             const node = params?.data || {};
@@ -310,15 +311,62 @@ const buildNodeLayer = (
     }];
 };
 
-const buildInteractionLayer = (nodes: NodeData[], gatewayThroughput: number, currentStageId: string) => {
+const buildInteractionLayer = (nodes: NodeData[]) => {
     return [{
         name: 'InteractionLayer',
         type: 'scatter',
         coordinateSystem: 'cartesian2d',
+        symbol: 'circle',
+        symbolSize: 40,
+        itemStyle: { 
+            color: 'rgba(255, 255, 255, 0.01)',
+            opacity: 1 
+        },
         silent: false,
         cursor: 'pointer',
-        symbolSize: 40,
-        itemStyle: { color: 'transparent' }, 
+        tooltip: { show: true },
+        label: {
+            show: false,
+            position: 'top',
+            distance: 12,
+            formatter: (params: any) => {
+                const node = params.data as NodeData;
+                const stage = STAGES.find(s => s.id === (node.stageId || 'AUTH'));
+                return `{name|${node.name}}\n{val|${Math.round(node.throughput || 0)} Mbps · ${stage?.name || 'IDLE'}}`;
+            },
+            rich: {
+                name: {
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    padding: [4, 8, 2, 8],
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    borderRadius: 4,
+                    textBorderColor: '#0ea5e9',
+                    textBorderWidth: 1
+                },
+                val: {
+                    color: '#0ea5e9',
+                    fontSize: 10,
+                    fontWeight: '900',
+                    fontFamily: 'monospace',
+                    padding: [2, 8, 4, 8],
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    borderRadius: 4
+                }
+            }
+        },
+        emphasis: {
+            scale: 1.2,
+            label: {
+                show: true
+            },
+            itemStyle: {
+                color: 'rgba(14, 165, 233, 0.2)',
+                shadowBlur: 20,
+                shadowColor: 'rgba(14, 165, 233, 0.8)'
+            }
+        },
         data: nodes.map(n => ({
             ...n,
             name: n.name,
@@ -361,7 +409,7 @@ export const buildChartOption = (
         // buildBackgroundLayer removed for cleanliness/simplicity in redraw
         ...buildFlowLayer(linesByStage, useGpuRendering, isGlobal, nodes),
         ...buildNodeLayer(nodes, selectedNames, viewMode, stageId, displayGatewayThroughput, gatewaySvgRaw, useGpuRendering, isRelayMode),
-        ...buildInteractionLayer(nodes, displayGatewayThroughput, stageId)
+        ...buildInteractionLayer(nodes)
     ];
 
     // 4. Construct Option
@@ -419,6 +467,7 @@ export const buildChartOption = (
         ],
         tooltip: {
             trigger: 'item',
+            confine: true, // Prevent clipping at boundaries
             backgroundColor: 'transparent',
             borderColor: 'transparent',
             padding: 0,
@@ -450,38 +499,38 @@ export const buildChartOption = (
                         const statusColor = isActive ? '#34d399' : '#94a3b8';
 
                         let html = `
-                        <div class="px-4 py-3 font-mono text-xs bg-slate-900/90 border border-sky-500/30 rounded-lg shadow-xl backdrop-blur-md">
-                            <div class="border-b border-sky-500/20 pb-2 mb-2 flex justify-between items-center gap-4">
-                                <span class="font-bold text-sky-400 text-sm tracking-tight">${node.name}</span>
-                                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] text-slate-400 border border-slate-700">NODE</span>
+                        <div style="padding: 12px; font-family: monospace; font-size: 11px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); min-width: 200px; color: #f3f4f6;">
+                            <div style="border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                                <span style="font-weight: bold; color: #38bdf8; font-size: 13px; letter-spacing: -0.025em;">${node.name}</span>
+                                <span style="padding: 2px 6px; border-radius: 4px; background: #1e293b; font-size: 9px; color: #94a3b8; border: 1px solid #334155; text-transform: uppercase;">NODE</span>
                             </div>
-                            <div class="space-y-1.5">
-                                <div class="flex justify-between gap-6">
-                                    <span class="text-slate-500">IP ADDRESS</span>
-                                    <span class="text-slate-300">192.168.1.${node.name.split('-').pop()}</span>
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b; text-transform: uppercase; font-size: 9px;">IP ADDRESS</span>
+                                    <span style="color: #cbd5e1;">192.168.1.${node.name.split('-').pop() || '1'}</span>
                                 </div>
-                                <div class="flex justify-between gap-6">
-                                    <span class="text-slate-500">SECURITY STAGE</span>
-                                    <span style="color:${ctx.color}" class="font-bold">${ctx.text}</span>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b; text-transform: uppercase; font-size: 9px;">SECURITY STAGE</span>
+                                    <span style="color:${ctx.color}; font-weight: bold;">${ctx.text}</span>
                                 </div>
-                                <div class="flex justify-between gap-6">
-                                    <span class="text-slate-500">STATE</span>
-                                    <span style="color:${statusColor}" class="font-bold tracking-widest">${statusText}</span>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b; text-transform: uppercase; font-size: 9px;">STATE</span>
+                                    <span style="color:${statusColor}; font-weight: bold; letter-spacing: 0.1em;">${statusText}</span>
                                 </div>
-                                <div class="flex justify-between gap-6 pt-1 border-t border-slate-800">
-                                    <span class="text-slate-500 uppercase">Throughput</span>
-                                    <span class="text-teal-400 font-bold">${Math.round(tput || 0)} Mbps</span>
+                                <div style="display: flex; justify-content: space-between; padding-top: 4px; border-top: 1px solid rgba(30, 41, 59, 1);">
+                                    <span style="color: #64748b; text-transform: uppercase; font-size: 9px;">Throughput</span>
+                                    <span style="color: #2ed1b7; font-weight: bold;">${Math.round(tput || 0)} Mbps</span>
                                 </div>`;
                                 
                         if (isActive && node.latency) {
                             html += `
-                                <div class="flex justify-between gap-6">
-                                    <span class="text-slate-500 uppercase">Latency</span>
-                                    <span class="text-amber-400 font-bold">${node.latency.toFixed(2)} ms</span>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b; text-transform: uppercase; font-size: 9px;">Latency</span>
+                                    <span style="color: #fbbf24; font-weight: bold;">${node.latency.toFixed(2)} ms</span>
                                 </div>
-                                <div class="flex justify-between gap-6">
-                                    <span class="text-slate-500 uppercase">Security</span>
-                                    <span class="text-emerald-400 font-bold">${node.securityScore || 100}%</span>
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span style="color: #64748b; text-transform: uppercase; font-size: 9px;">Security</span>
+                                    <span style="color: #34d399; font-weight: bold;">${node.securityScore || 100}%</span>
                                 </div>`;
                         }
 

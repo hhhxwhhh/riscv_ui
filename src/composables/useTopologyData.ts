@@ -19,6 +19,7 @@ export function useTopologyData(
         : (modelValue.value ? [modelValue.value] : []);
         
     const selectedNodeNames = ref<string[]>(initialSel);
+    const inspectedNode = ref<NodeData | null>(null);
     const viewMode = ref<'stage' | 'device' | 'all'>('stage');
     let isDisposed = false;
 
@@ -258,6 +259,19 @@ export function useTopologyData(
         triggerRender();
     };
 
+    const hoverNode = (name: string) => {
+        const node = nodes.value.find(n => n.name === name);
+        if (node) {
+            inspectedNode.value = node;
+            triggerRender();
+        }
+    };
+
+    const blurNode = () => {
+        inspectedNode.value = null;
+        triggerRender();
+    };
+
     // Watchers
     watch(devicesSource, (newDevices, oldDevices) => {
         if (!newDevices) return;
@@ -316,10 +330,13 @@ export function useTopologyData(
         nodes,
         deviceNodes,
         selectedNodeNames,
+        inspectedNode,
         viewMode,
         displayGatewayThroughput,
         startDataListener,
         selectNode,
+        hoverNode,
+        blurNode,
         isDisposed
     };
 }

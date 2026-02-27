@@ -32,7 +32,15 @@ const topology = useTopologyData(
     chartSize
 );
 
-const { nodes, deviceNodes, selectedNodeNames, viewMode, displayGatewayThroughput, selectNode, startDataListener } = topology;
+const { nodes, deviceNodes, selectedNodeNames, inspectedNode, viewMode, displayGatewayThroughput, selectNode, hoverNode, blurNode, startDataListener } = topology;
+
+const activeNode = computed(() => {
+    if (inspectedNode.value) return inspectedNode.value;
+    if (selectedNodeNames.value.length === 1) {
+        return nodes.value.find(n => n.name === selectedNodeNames.value[0]);
+    }
+    return null;
+});
 
 let optionBuilder: ((selectedNames: string[]) => echarts.EChartsOption) | null = null;
 
@@ -125,11 +133,23 @@ onMounted(() => {
             startDataListener(); // Start listening ONLY after initial layout is stable
         }, 150);
 
-        // Robust Click Handler on the transparent Interaction Layer or GL Layer
+        // Interaction Handlers
         chartInstance.on('click', (params: any) => {
             if (params.componentType === 'series' && (params.seriesName === 'InteractionLayer' || params.seriesName === 'GLNodes')) {
                 selectNode(params.name);
+            } else {
+                clearSelection();
             }
+        });
+
+        chartInstance.on('mouseover', (params: any) => {
+            if (params.componentType === 'series' && (params.seriesName === 'InteractionLayer' || params.seriesName === 'GLNodes')) {
+                hoverNode(params.name);
+            }
+        });
+
+        chartInstance.on('mouseout', () => {
+            blurNode();
         });
 
         window.addEventListener('resize', handleResize);
@@ -210,14 +230,80 @@ watch(
                 
                 <div ref="chartRef" class="w-full h-full"></div>
                 
-                <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
-                    <div class="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 rounded border border-emerald-500/30">
+                <div class="absolute bottom-4 right-4 flex items-center gap-2 z-10">
+                    <div class="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 rounded border border-emerald-500/30 backdrop-blur-sm">
                         <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></div>
                         <span class="text-[9px] text-emerald-400 font-mono font-bold tracking-tighter">WPA3-EHT ACTIVE</span>
                     </div>
                 </div>
                 
-                <div class="canvas-hint">Interactive Mesh: Drag or Click to Zoom • Nodes with Glow are Transmitting</div>
+                <div class="canvas-hint">Network Architecture: Select a Node to Inspect Real-time Telemetry & Security Analysis</div>
+
+                <!-- Persistent Selected Node Inspector (Alternative to Hover) -->
+                <transition name="fade">
+                    <div v-if="activeNode" 
+                        class="absolute top-4 right-4 z-20 w-64 p-4 bg-slate-900/95 border border-sky-500/40 rounded-xl shadow-2xl backdrop-blur-xl">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-black text-sky-400 tracking-tight uppercase">Node Inspector</h3>
+                            <button @click="clearSelection" v-if="!inspectedNode" class="text-slate-500 hover:text-rose-400 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                            </button>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div class="flex flex-col gap-1">
+                                <div class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Identity</div>
+                                <div class="text-lg font-bold text-slate-200 truncate leading-tight">
+                                    {{ activeNode.name }}
+                                </div>
+                                <div class="text-[11px] font-mono text-slate-400">
+                                    IP: 192.168.1.{{ activeNode.name.split('-').pop() || '1' }}
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="p-2 bg-slate-950/40 rounded-lg border border-white/5">
+                                    <div class="text-[9px] text-slate-500 uppercase mb-1">Status</div>
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-1.5 h-1.5 rounded-full" 
+                                            :class="activeNode.throughput ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'"></div>
+                                        <span class="text-[10px] font-bold" :class="activeNode.throughput ? 'text-emerald-400' : 'text-slate-500'">
+                                            {{ activeNode.throughput ? 'ACTIVE' : 'IDLE' }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="p-2 bg-slate-950/40 rounded-lg border border-white/5">
+                                    <div class="text-[9px] text-slate-500 uppercase mb-1">Stage</div>
+                                    <div class="text-[10px] font-bold text-amber-400">
+                                        {{ getStageContext(activeNode.stageId || '').text }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3 pt-2 border-t border-white/5">
+                                <div class="flex justify-between items-end">
+                                    <div class="text-[10px] text-slate-500 uppercase">Throughput</div>
+                                    <div class="text-sm font-black font-mono text-sky-400">
+                                        {{ Math.round(activeNode.throughput || 0) }} Mbps
+                                    </div>
+                                </div>
+                                <div class="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-sky-500 transition-all duration-700" 
+                                        :style="{ width: Math.min(100, (activeNode.throughput || 0) / 100) + '%' }"></div>
+                                </div>
+
+                                <div v-if="activeNode.latency" class="flex justify-between items-center text-[11px]">
+                                    <span class="text-slate-500">LATENCY</span>
+                                    <span class="text-amber-400 font-mono font-bold">{{ activeNode.latency?.toFixed(2) }}ms</span>
+                                </div>
+                                <div v-if="activeNode.securityScore" class="flex justify-between items-center text-[11px]">
+                                    <span class="text-slate-500">SECURITY</span>
+                                    <span class="text-emerald-400 font-mono font-bold">{{ activeNode.securityScore }}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
             </div>
 
             <div class="topology-side">
