@@ -14,11 +14,13 @@ This guide explains how your physical computers and gateway devices can report d
 The Management Server runs at `http://<SERVER_IP>:8080`.
 
 ### A. Device/Gateway Telemetry (上报遥测数据)
+
 Use this endpoint to update real-time status, traffic, and security stages.
 
 **Endpoint:** `POST /api/telemetry`
 
 **JSON Payload Schema:**
+
 ```json
 {
   "deviceId": "node-pc-01",      // Unique identifier (MAC or ID)
@@ -83,8 +85,9 @@ if __name__ == "__main__":
 ```
 
 ## 4. UI Visualization Logic (前端展示逻辑)
+
 - **Node Selection**: Clicking the node in the dashboard will open the **Node Inspector**, showing your reported IP and real-time throughput.
-- **Stage Color Sync**: 
+- **Stage Color Sync**:
   - `AUTH` -> Violet/Indigo
   - `ENCRYPT` -> Emerald/Green
   - `DECRYPT` -> Rose/Pink
