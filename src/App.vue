@@ -27,11 +27,11 @@ const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
 
 // Initial empty list, populated by API and WebSocket
-const devices = ref<{ 
-  id?: string; 
-  name: string; 
-  ip: string; 
-  status?: string; 
+const devices = ref<{
+  id?: string;
+  name: string;
+  ip: string;
+  status?: string;
   metrics?: { throughput: number; latency: number; securityScore: number };
   stageId?: string;
 }[]>([]);
@@ -95,91 +95,42 @@ const handleWsLastMessage = (timestamp: number) => {
 const handleTelemetry = (packet: any) => {
   if (!packet) return;
 
-  // Handle dynamic device join/exit messages
+  // 1. Handle dynamic device join/exit messages
   if (packet.type === 'device_join' && packet.device) {
     const exists = devices.value.find(d => d.ip === packet.device.ip || d.name === packet.device.name);
     if (!exists) {
-      devices.value = [...devices.value, { ...packet.device, metrics: { throughput: 0, latency: 0, securityScore: 0 } }];
+      devices.value = [...devices.value, {
+        ...packet.device,
+        metrics: packet.device.metrics || { throughput: 0, latency: 0, securityScore: 0 },
+        stageId: packet.device.stageId || 'AUTH'
+      }];
+    } else {
+      Object.assign(exists, packet.device);
     }
     return;
   }
+
   if (packet.type === 'device_exit') {
     devices.value = devices.value.filter(d => d.ip !== packet.ip && d.name !== packet.name);
-    // Sync selected state
     if (selectedDevices.value.includes(packet.name)) {
       selectedDevices.value = selectedDevices.value.filter(n => n !== packet.name);
     }
     return;
   }
 
-// Update specific device in the list and global metrics
-  if (packet.deviceId || packet.source) {
-    const deviceIndex = devices.value.findIndex(d => d.id === packet.deviceId || d.ip === packet.source);
-    
-    if (deviceIndex !== -1) {
-      const existingDev = devices.value[deviceIndex];
-      
-      if (existingDev) {
-        // Update the existing object directly to maintain strict type structure
-        if (packet.metrics) {
-          existingDev.metrics = {
-            throughput: Number(packet.metrics.throughput ?? 0),
-            latency: Number(packet.metrics.latency ?? 0),
-            securityScore: Number(packet.metrics.securityScore ?? 0)
-          };
-        }
-        if (packet.stageId) {
-          existingDev.stageId = packet.stageId;
-        }
-        if (packet.status) {
-          existingDev.status = packet.status;
-        } else if (!existingDev.status) {
-          existingDev.status = 'online';
-        }
-
-        // Trigger reactivity for the array
-        devices.value = [...devices.value];
-      }
-    } else if (packet.type === 'telemetry') {
-      // Dynamic device creation on first telemetry if not exists
-      const newDev: any = {
-        id: packet.deviceId || `dev-${Date.now()}`,
-        name: packet.deviceName || packet.deviceId || 'Unknown Device',
-        ip: packet.source || '0.0.0.0',
-        status: packet.status || 'online',
-        stageId: packet.stageId || 'AUTH',
-        deviceType: packet.deviceType,
-        metrics: {
-          throughput: Number(packet.metrics?.throughput ?? 0),
-          latency: Number(packet.metrics?.latency ?? 0),
-          securityScore: Number(packet.metrics?.securityScore ?? 0)
-        }
-      };
-      devices.value.push(newDev);
+  // 2. Telemetry & Metrics Update for known devices
+  if (packet.deviceId) {
+    const dev = devices.value.find(d => d.id === packet.deviceId || d.name === packet.deviceId);
+    if (dev) {
+      dev.status = 'online';
+      if (packet.metrics) dev.metrics = { ...dev.metrics, ...packet.metrics };
+      if (packet.stageId) dev.stageId = packet.stageId;
     }
   }
 
-  // Update global/selected metrics display
-  if (packet?.metrics) {
-    const isTarget = selectedDeviceIPs.value.length === 0 || selectedDeviceIPs.value.includes(packet.source as string);
-
-    if (isTarget) {
-      latestMetrics.value = {
-        throughput: Number(packet.metrics.throughput ?? 0),
-        latency: Number(packet.metrics.latency ?? 0),
-        securityScore: Number(packet.metrics.securityScore ?? 0)
-      };
-
-      // Sync stage display if exactly ONE device is selected
-      // This prevents the UI from jumping when multiple devices are in different stages
-      if (packet.stageId && selectedDevices.value.length === 1) {
-        const idx = STAGES.findIndex(s => s.id === packet.stageId);
-        // Only sync if not simulating and it's a valid new stage
-        if (!isSimulating.value && idx !== -1 && idx !== currentStageIndex.value) {
-          currentStageIndex.value = idx;
-        }
-      }
-    }
+  // 3. Global Dashboard Update
+  if (packet.metrics) {
+    latestMetrics.value = { ...latestMetrics.value, ...packet.metrics };
   }
 };
 
@@ -259,10 +210,12 @@ onMounted(() => {
               class="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-400 to-violet-500 flex items-center justify-center font-bold shadow-md text-sm">
               W7</div>
             <div>
-              <h1 class="text-lg font-black tracking-wide bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+              <h1
+                class="text-lg font-black tracking-wide bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
                 RISC-V ADVANCED SECURITY GATEWAY DASHBOARD
               </h1>
-              <div class="subtle-text text-[10px] uppercase tracking-widest opacity-70">Advanced Crypto-Gateway Navigation System</div>
+              <div class="subtle-text text-[10px] uppercase tracking-widest opacity-70">Advanced Crypto-Gateway
+                Navigation System</div>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -298,7 +251,7 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        
+
         <!-- Platform Level Summary -->
         <PlatformOverview :devices="devices" class="mt-2" />
 
@@ -367,13 +320,14 @@ onMounted(() => {
       <section class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4" v-if="currentStage">
         <!-- Left: Code Execution (2/3 width) -->
         <div class="lg:col-span-2 min-h-[420px] panel panel-glow p-3">
-          <CodeExecutionViewer :deviceName="selectedDevices[0]" :deviceIP="selectedDeviceIPs[0]"
-            :stage="currentStage" :devices="devices" />
+          <CodeExecutionViewer :deviceName="selectedDevices[0]" :deviceIP="selectedDeviceIPs[0]" :stage="currentStage"
+            :devices="devices" />
         </div>
 
         <!-- Right: Analysis (1/3 width) -->
         <div class="lg:col-span-1 min-h-[420px] panel panel-glow p-3">
-          <DataAnalysis :deviceName="selectedDevices[0]" :metrics="latestMetrics" :stage="currentStage" :devices="devices" />
+          <DataAnalysis :deviceName="selectedDevices[0]" :metrics="latestMetrics" :stage="currentStage"
+            :devices="devices" />
         </div>
       </section>
     </div>

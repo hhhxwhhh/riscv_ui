@@ -38,9 +38,18 @@ const PORT = process.env.PORT || 8080;
 // In-memory data
 const DEVICE_OFFLINE_TIMEOUT = 10000;
 const devices = [];
+const telemetryHistory = []; // Track historical data for trend analysis
+const MAX_HISTORY_LENGTH = 100;
 
-// Periodic check for offline devices removed for pure data-driven test.
-// We only follow explicit device join/telemetry.
+// Periodic check for offline devices
+setInterval(() => {
+  const now = Date.now();
+  devices.forEach((d) => {
+    if (now - d.lastSeen > DEVICE_OFFLINE_TIMEOUT) {
+      d.status = "offline";
+    }
+  });
+}, 5000);
 
 let latestMetrics = {
   throughput: 850,
@@ -72,54 +81,86 @@ app.get("/api/metrics", (req, res) => {
 app.post("/api/telemetry", (req, res) => {
   const payload = req.body || {};
   const now = Date.now();
-  // Parameter validation
+
+  // 1. Enhanced Validation for external computers/devices
   if (!payload.deviceId || typeof payload.deviceId !== "string") {
     console.warn("[API] /api/telemetry: deviceId missing or invalid");
-    res.status(400).json({ error: "deviceId required" });
-    return;
-  }
-  if (payload.metrics && typeof payload.metrics !== "object") {
-    console.warn("[API] /api/telemetry: metrics invalid");
-    res.status(400).json({ error: "metrics must be object" });
-    return;
+    return res.status(400).json({
+      error: "deviceId required",
+      example: {
+        deviceId: "node-01",
+        metrics: { throughput: 500, latency: 1.5 },
+      },
+    });
   }
 
-  const dev = devices.find((d) => d.id === payload.deviceId);
+  // 2. Data Persistence & Device Discovery
+  let dev = devices.find((d) => d.id === payload.deviceId);
   if (!dev) {
-    // Dynamically register new real devices
-    const newDev = {
+    dev = {
       id: payload.deviceId,
       name: payload.deviceName || `External Node ${payload.deviceId.slice(-4)}`,
       ip: payload.source || req.ip || "unknown",
       status: "online",
       lastSeen: now,
+      stageId: payload.stageId || "AUTH",
     };
-    devices.push(newDev);
-    console.log(`[External] New device registered: ${newDev.name} (${newDev.ip})`);
-    broadcast({ type: "device_join", device: newDev });
+    devices.push(dev);
+    console.log(`[Discovery] New node connected: ${dev.name} from ${dev.ip}`);
+    broadcast({ type: "device_join", device: dev });
   } else {
     dev.lastSeen = now;
-    dev.status = payload.status || "online";
+    dev.status = "online";
+    if (payload.stageId) dev.stageId = payload.stageId;
   }
 
+  // 3. Traffic Analysis & Trend Injection
   if (payload.metrics) {
+    const entry = {
+      ts: now,
+      deviceId: payload.deviceId,
+      ...payload.metrics,
+    };
+    telemetryHistory.push(entry);
+    if (telemetryHistory.length > MAX_HISTORY_LENGTH) telemetryHistory.shift();
+
+    // Update global aggregate if it's a gateway-level report
     latestMetrics = { ...latestMetrics, ...payload.metrics };
   }
 
-  // Fine-grained broadcast message types
+  // 4. Real-time Delivery
   broadcast({ type: "telemetry", ts: now, ...payload });
-  res.json({ ok: true });
+  res.json({ ok: true, serverTime: now });
+});
+
+// REST: Analysis API for traffic trends (NEW)
+app.get("/api/analysis/trends", (req, res) => {
+  const windowSize = parseInt(req.query.limit) || 20;
+  res.json(telemetryHistory.slice(-windowSize));
+});
+
+// REST: Performance Benchmarks (NEW)
+app.get("/api/analysis/benchmarks", (req, res) => {
+  res.json({
+    isa_speedup: latestMetrics.latency
+      ? (5.0 / latestMetrics.latency).toFixed(2)
+      : 0,
+    throughput_gain: latestMetrics.throughput
+      ? (latestMetrics.throughput / 100).toFixed(2)
+      : 0,
+    security_level: "High (RISC-V Zk Extension)",
+  });
 });
 
 // Platform Statistics
 app.get("/api/platform/stats", (req, res) => {
-  const onlineCount = devices.filter(d => d.status === 'online').length;
+  const onlineCount = devices.filter((d) => d.status === "online").length;
   res.json({
     totalDevices: devices.length,
     onlineDevices: onlineCount,
     totalThroughput: latestMetrics.throughput,
-    algorithm: 'SM4 Custom ISA',
-    securityLevel: 'High (HW Accelerated)'
+    algorithm: "SM4 Custom ISA",
+    securityLevel: "High (HW Accelerated)",
   });
 });
 
@@ -156,9 +197,9 @@ wss.on("connection", (ws) => {
     try {
       const payload = JSON.parse(data.toString());
       // Handle heartbeats or specific control messages if needed
-      if (payload.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong' }));
-          return;
+      if (payload.type === "ping") {
+        ws.send(JSON.stringify({ type: "pong" }));
+        return;
       }
 
       // Validate deviceId
@@ -194,4 +235,3 @@ wss.on("connection", (ws) => {
 
 // System now strictly waits for external data via REST or WebSocket.
 const STAGE_IDS = ["AUTH", "ENCRYPT", "DECRYPT", "HASH"];
-

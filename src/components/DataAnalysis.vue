@@ -55,7 +55,7 @@ const getAggregatedData = (deviceName: string, stage: StageInfo, allDevices: any
 
     // Otherwise, calculate averages for all devices currently in this stage
     const devicesInStage = allDevices.filter(d => d.stageId === stage.id && d.metrics);
-    
+
     if (devicesInStage.length === 0) {
         // Fallback to baseline
         return {
@@ -90,22 +90,27 @@ const updateChart = () => {
 
     if (!chartInstance) return;
 
+    // Optional: Fetch history from new backend API
+    // fetch('/api/analysis/trends?limit=10').then(r => r.json()).then(history => { ... });
+
     chartInstance.setOption({
         series: [
-            { data: [data.standard.throughput] },
-            { data: [data.custom.throughput] },
-            { 
-               data: [data.standard.score],
-               itemStyle: {
-                 color: data.standard.score > 90 ? theme.success : (data.standard.score > 70 ? '#fbbf24' : theme.danger)
-               }
+            {
+                data: [data.standard.throughput],
+                label: { formatter: '{c} MB/s' }
             },
-            { 
-               data: [data.custom.score],
-               itemStyle: {
-                 color: data.custom.score > 95 ? theme.success : '#38bdf8'
-               }
-            }
+            {
+                data: [data.custom.throughput],
+                label: {
+                    formatter: (params: any) => `{val|${params.value}} {unit|MB/s}`,
+                    rich: {
+                        val: { fontWeight: 'bold' },
+                        unit: { fontSize: 8, opacity: 0.6 }
+                    }
+                }
+            },
+            { data: [data.standard.score] },
+            { data: [data.custom.score] }
         ]
     });
 };
