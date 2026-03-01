@@ -32,10 +32,35 @@ const theme = {
 };
 
 // Aggregate data for the whole group or specific device
-const getAggregatedData = (deviceName: string, stage: StageInfo, allDevices: any[]) => {
-    // If a specific device is selected, just use its data (from metrics prop or devices list)
-    if (deviceName && deviceName !== 'All Devices') {
-        const dev = allDevices.find(d => d.name === deviceName);
+const getAggregatedData = (deviceName: string | string[], stage: StageInfo, allDevices: any[]) => {
+    // If multiple devices are selected (Relay Mode)
+    if (Array.isArray(deviceName) && deviceName.length === 2) {
+        const devs = allDevices.filter(d => deviceName.includes(d.name));
+        if (devs.length === 2 && devs[0].metrics && devs[1].metrics) {
+            const combinedTput = devs[0].metrics.throughput + devs[1].metrics.throughput;
+            const avgLat = (devs[0].metrics.latency + devs[1].metrics.latency) / 2;
+            const avgScore = (devs[0].metrics.securityScore + devs[1].metrics.securityScore) / 2;
+
+            return {
+                standard: {
+                    throughput: stage.metrics.stdThroughput * 2, // Compare double-stream baseline
+                    latency: stage.metrics.stdLatency,
+                    score: stage.metrics.stdSecurityScore
+                },
+                custom: {
+                    throughput: combinedTput,
+                    latency: avgLat,
+                    score: avgScore
+                },
+                speedup: (stage.metrics.stdLatency / avgLat).toFixed(1)
+            };
+        }
+    }
+
+    // If single device is selected
+    const targetName = Array.isArray(deviceName) ? deviceName[0] : deviceName;
+    if (targetName && targetName !== 'All Devices') {
+        const dev = allDevices.find(d => d.name === targetName);
         if (dev && dev.metrics) {
             return {
                 standard: {

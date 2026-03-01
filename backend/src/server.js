@@ -128,9 +128,53 @@ app.post("/api/telemetry", (req, res) => {
     latestMetrics = { ...latestMetrics, ...payload.metrics };
   }
 
-  // 4. Real-time Delivery
+  // 4. Real-time Delivery & NetFlow Tracking
   broadcast({ type: "telemetry", ts: now, ...payload });
-  res.json({ ok: true, serverTime: now });
+
+  // Aggregate multi-device traffic for monitor
+  const activeNodes = devices.filter((d) => d.status === "online");
+  const totalTput = activeNodes.reduce(
+    (sum, d) => sum + (d.metrics?.throughput || 0),
+    0,
+  );
+
+  console.log(
+    `[NetFlow] Nodes: ${activeNodes.length} | Load: ${totalTput.toFixed(1)} Mbps | Gateway: RISC-V Zk`,
+  );
+
+  res.json({
+    ok: true,
+    serverTime: now,
+    nodeCount: activeNodes.length,
+    netLoad: totalTput,
+  });
+});
+
+// REST: Multi-device Traffic Snapshot (NEW)
+app.get("/api/analysis/traffic-map", (req, res) => {
+  const onlineDevices = devices.filter((d) => d.status === "online");
+  const total = onlineDevices.reduce(
+    (sum, d) => sum + (d.metrics?.throughput || 0),
+    0,
+  );
+
+  const nodeTraffic = onlineDevices.map((d) => ({
+    id: d.id,
+    name: d.name,
+    throughput: d.metrics?.throughput || 0,
+    stage: d.stageId || "IDLE",
+    contribution:
+      total > 0
+        ? (((d.metrics?.throughput || 0) / total) * 100).toFixed(1) + "%"
+        : "0%",
+  }));
+
+  res.json({
+    timestamp: Date.now(),
+    totalThroughput: total,
+    activeNodes: onlineDevices.length,
+    distribution: nodeTraffic,
+  });
 });
 
 // REST: Analysis API for traffic trends (NEW)

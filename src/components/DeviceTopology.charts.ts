@@ -48,18 +48,24 @@ const calculateFlowLines = (
             let source = node.name;
             let target = gatewayNode.name;
 
-            // Handle Relay Mode Complex Paths
+            // Handle Relay Mode Complex Paths (Node A <-> Gateway <-> Node B)
             if (isRelayMode) {
                 if (node.name === nodeA) {
-                    if (['AUTH', 'ENCRYPT'].includes(sid)) target = gatewayNode.name;
-                    else if (sid === 'DECRYPT') { source = gatewayNode.name; target = gatewayNode.name; }
-                    else if (sid === 'HASH') { source = gatewayNode.name; target = nodeB; }
-                    else return;
+                    if (['AUTH', 'ENCRYPT'].includes(sid)) {
+                        source = nodeA; target = gatewayNode.name;
+                    } else if (sid === 'DECRYPT') {
+                        source = gatewayNode.name; target = gatewayNode.name; // Internal processing
+                    } else if (sid === 'HASH') {
+                        source = gatewayNode.name; target = nodeB;
+                    } else return;
                 } else if (node.name === nodeB) {
-                    if (['AUTH', 'ENCRYPT'].includes(sid)) { source = nodeB; target = gatewayNode.name; }
-                    else if (sid === 'DECRYPT') { source = gatewayNode.name; target = gatewayNode.name; }
-                    else if (sid === 'HASH') { source = gatewayNode.name; target = nodeA; }
-                    else return;
+                    if (['AUTH', 'ENCRYPT'].includes(sid)) {
+                        source = nodeB; target = gatewayNode.name;
+                    } else if (sid === 'DECRYPT') {
+                        source = gatewayNode.name; target = gatewayNode.name; // Internal processing
+                    } else if (sid === 'HASH') {
+                        source = gatewayNode.name; target = nodeA;
+                    } else return;
                 } else return;
             } else {
                 // Standard Star Topology Flow
@@ -79,11 +85,15 @@ const calculateFlowLines = (
                 const activeOpacity = Math.max(0.6, Math.min(1.0, 0.4 + (tput / 1200)));
                 const flowOpacity = isActive ? activeOpacity : 0.08;
                 
+                // Highlight nodes specifically in two-node relay mode
+                const isRelayPath = isRelayMode && (node.name === nodeA || node.name === nodeB);
+                
                 const ctx = getStageContext(sid);
                 const stageLines = linesByStage[sid] || (linesByStage[sid] = []);
                 
                 // Line width varies with throughput: between 1.2 and 4.5
-                const lineWidth = isActive ? Math.max(1.5, Math.min(4.5, 1.2 + (tput / 250))) : 1.2;
+                // Increase thickness for relay mode to emphasize the connection
+                const lineWidth = isActive ? Math.max(1.8, Math.min(6.0, (isRelayPath ? 2.5 : 1.2) + (tput / 200))) : 1.2;
 
                 // Special "Internal Processing" Loop for Decrypt stage
                 if (sid === 'DECRYPT' && (isRelayMode || isSelected)) {
@@ -147,7 +157,7 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             rippleEffect: { 
                 brushType: 'fill', 
                 scale: 2.5 + 1.0 * intensity, 
-                period: Math.max(1.8, 4.5 - 3 * intensity), 
+                period: Math.max(1.5, 4.0 - 2.5 * intensity), 
                 color: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.4)` 
             },
             itemStyle: { 
@@ -167,7 +177,7 @@ const buildGatewayLayer = (nodes: NodeData[], throughput: number, isLargeMode: b
             rippleEffect: { 
                 brushType: 'stroke', 
                 scale: 4 + 2 * intensity, 
-                period: 3, 
+                period: 2.5, 
                 color: color 
             },
             itemStyle: { 
