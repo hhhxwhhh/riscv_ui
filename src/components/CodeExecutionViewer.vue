@@ -265,35 +265,32 @@ const copyCode = async () => {
 
                     <div class="absolute inset-0 overflow-y-auto p-3 custom-scrollbar">
                         <div v-for="(inst, sIdx) in standardInstructions" :key="'std-' + sIdx"
-                            class="py-1 px-2 mb-0.5 rounded transition-all duration-300 cursor-default flex items-center text-[12px] relative z-10"
+                            class="py-1.5 px-3 mb-1 rounded transition-all duration-300 cursor-default flex items-center text-[12px] relative z-10"
                             :class="{
-                                'bg-rose-500/15 text-rose-100 border-l-2 border-rose-500 shadow-[2px_0_10px_rgba(244,63,94,0.05)] font-bold': hoveredCustomIdx !== null && customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
-                                'text-slate-600 opacity-30 grayscale blur-[0.2px]': hoveredCustomIdx !== null && !customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
+                                'bg-rose-500/10 text-rose-100 border-l-2 border-rose-500 shadow-[2px_0_10px_rgba(244,63,94,0.05)] font-bold': hoveredCustomIdx !== null && customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
+                                'text-slate-600 opacity-30 grayscale blur-[0.1px]': hoveredCustomIdx !== null && !customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx),
                                 'text-slate-400 hover:text-slate-200': hoveredCustomIdx === null
                             }">
-                            <div class="w-6 text-[10px] text-gray-700 select-none mr-3 text-right font-mono">{{ (sIdx +
+                            <div class="w-6 text-[10px] text-gray-700 select-none mr-4 text-right font-mono">{{ (sIdx +
                                 1).toString().padStart(2, '0') }}</div>
-                            <div class="truncate flex-1 tracking-tight">{{ inst }}</div>
+                            <div
+                                class="flex-1 tracking-tight font-mono whitespace-nowrap overflow-hidden text-ellipsis">
+                                {{ inst }}</div>
                             <div v-if="hoveredCustomIdx === null || customInstructions[hoveredCustomIdx]?.mappedStandardIdxs.includes(sIdx)"
-                                class="text-[9px] font-mono opacity-20 ml-3">2c</div>
+                                class="text-[10px] font-mono opacity-30 ml-4 font-bold">2c</div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Right: HW Accelerated Stream -->
-            <div class="flex flex-col pl-4">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex gap-2">
-                        <button v-for="type in customTypes" :key="type.key"
-                            @click="selectedType = type.key; selectedCustomIdx = null"
-                            :class="selectedType === type.key ? 'bg-teal-500/30 text-teal-300 font-bold border-teal-500/50' : 'bg-slate-800/40 text-gray-500 border-transparent hover:text-gray-300'"
-                            class="px-2.5 py-1.5 rounded-lg border transition-all text-[11px] uppercase tracking-wider">
-                            {{ type.label }}
-                        </button>
-                    </div>
+            <div class="flex flex-col pl-4 min-w-0">
+                <div class="flex items-center justify-between mb-3 gap-2">
+                    <h3 class="text-[12px] font-black text-gray-400 uppercase tracking-widest">
+                        HW Accelerated
+                    </h3>
                     <div
-                        class="text-[10px] font-black font-mono text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                        class="text-[10px] font-black font-mono text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20 whitespace-nowrap">
                         Σ {{customInstructions.filter(i => !i.text.startsWith('#')).length * 5}} CYCLES
                     </div>
                 </div>
@@ -311,24 +308,26 @@ const copyCode = async () => {
                             }">
 
                             <div class="p-3 relative z-10">
-                                <div class="flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-6">
+                                    <div class="flex items-center gap-3 min-w-0">
                                         <div class="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-500"
                                             :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.6)] animate-pulse' : 'bg-slate-700'">
                                         </div>
-                                        <div class="font-bold text-[12px] leading-tight tracking-tight truncate transition-colors"
+                                        <div class="font-bold text-[12px] leading-tight tracking-tight truncate transition-colors uppercase"
                                             :class="(idx === selectedCustomIdx || hoveredCustomIdx === idx) ? 'text-teal-300' : 'text-slate-300'">
                                             {{ item.text }}
                                         </div>
                                     </div>
 
-                                    <div class="flex items-center gap-2 flex-shrink-0">
-                                        <span class="text-[9px] font-mono text-slate-500 tabular-nums">5c</span>
-                                        <div
-                                            class="bg-rose-500/15 border border-rose-500/30 text-rose-400 px-1.5 py-0.5 rounded-md text-[9px] font-black shadow-sm flex items-center gap-1">
-                                            <Zap class="w-2.5 h-2.5" />
-                                            MAPPED:{{ item.mappedStandardIdxs.length }}
+                                    <div class="flex items-center gap-6 flex-shrink-0">
+                                        <div class="flex items-center gap-2">
+                                            <Zap class="w-3 h-3 text-rose-500/60" />
+                                            <span
+                                                class="text-[10px] font-mono text-rose-400/80 font-bold tabular-nums">M:{{
+                                                item.mappedStandardIdxs.length }}</span>
                                         </div>
+                                        <span
+                                            class="text-[10px] font-mono text-slate-500 tabular-nums font-bold">5c</span>
                                     </div>
                                 </div>
 
@@ -372,6 +371,17 @@ const copyCode = async () => {
 /* Hide scrollbar for cleaner look */
 .custom-scrollbar::-webkit-scrollbar {
     width: 5px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
