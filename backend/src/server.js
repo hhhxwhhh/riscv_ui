@@ -47,9 +47,11 @@ const MAX_HISTORY_LENGTH = 100;
 // Periodic check for offline devices with broadcast
 setInterval(() => {
   const now = Date.now();
+  let changed = false;
   devices.forEach((d) => {
     if (d.status === "online" && now - d.lastSeen > DEVICE_OFFLINE_TIMEOUT) {
       d.status = "offline";
+      changed = true;
       console.log(`[Status] Node went offline: ${d.name} (${d.id})`);
       // 主动广播设备离线状态，确保前端同步
       broadcast({
@@ -60,6 +62,14 @@ setInterval(() => {
       });
     }
   });
+
+  // 如果状态发生变化，广播最新的设备列表快照
+  if (changed) {
+    broadcast({
+      type: "device_list_update",
+      devices: devices.map((d) => ({ ...d })),
+    });
+  }
 }, 2000); // 增加检查频率
 
 let latestMetrics = {
@@ -266,9 +276,7 @@ function heartbeat() {
 function broadcast(message) {
   const data = JSON.stringify(message);
   wss.clients.forEach((client) => {
-    iisAlive = true;
-  ws.on("pong", heartbeat);
-  ws.f (client.readyState === 1) {
+    if (client.readyState === 1) {
       client.send(data);
     }
   });
