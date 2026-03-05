@@ -57,8 +57,7 @@ const displayStats = computed(() => {
 
 <template>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div
-            class="bg-indigo-500/5 border border-indigo-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden transition-all duration-500 shadow-lg"
+        <div class="bg-indigo-500/5 border border-indigo-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden transition-all duration-500 shadow-lg"
             :class="{ 'ring-2 ring-rose-500 ring-inset bg-rose-500/5': displayStats.securityThreat }">
             <div class="absolute -right-4 -top-4 w-12 h-12 rounded-full blur-xl"
                 :class="displayStats.securityThreat ? 'bg-rose-500/20 animate-pulse' : 'bg-indigo-500/10'"></div>
@@ -71,7 +70,8 @@ const displayStats = computed(() => {
                 :class="displayStats.securityThreat ? 'text-rose-200' : 'text-indigo-200'">
                 {{ displayStats.securityThreat ? 'INTEGRITY RISK' : 'RISC-V Zkn + Zkq' }}
             </div>
-            <div class="text-[9px] mt-0.5 font-mono transition-colors duration-500" :class="displayStats.securityThreat ? 'text-rose-400' : 'text-indigo-400/80'">
+            <div class="text-[9px] mt-0.5 font-mono transition-colors duration-500"
+                :class="displayStats.securityThreat ? 'text-rose-400' : 'text-indigo-400/80'">
                 {{ displayStats.securityThreat ? 'CORE SECURITY WARNING' : 'SM2/3/4 HW-Vectorized' }}
             </div>
         </div>
