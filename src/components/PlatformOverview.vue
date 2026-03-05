@@ -42,12 +42,15 @@ const displayStats = computed(() => {
 
     const mloCount = all.filter(d => d.linkType === 'MLO-Aggregated').length;
 
+    const criticalNodes = all.filter(d => d.metrics?.securityScore < 70).length;
+
     return {
         total: all.length,
         active: activeOnes.length,
         throughputMbps: totalMbps,
         avgLatencyMs: dataFlowingNodes.length > 0 ? (totalLat / dataFlowingNodes.length).toFixed(2) : '0.80',
-        mloUsage: all.length > 0 ? Math.round((mloCount / all.length) * 100) : 0
+        mloUsage: all.length > 0 ? Math.round((mloCount / all.length) * 100) : 0,
+        securityThreat: criticalNodes > 0
     };
 });
 </script>
@@ -55,13 +58,22 @@ const displayStats = computed(() => {
 <template>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div
-            class="bg-indigo-500/5 border border-indigo-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden">
-            <div class="absolute -right-4 -top-4 w-12 h-12 bg-indigo-500/10 rounded-full blur-xl"></div>
+            class="bg-indigo-500/5 border border-indigo-500/20 p-2.5 rounded-lg backdrop-blur-md relative overflow-hidden transition-all duration-500 shadow-lg"
+            :class="{ 'ring-2 ring-rose-500 ring-inset bg-rose-500/5': displayStats.securityThreat }">
+            <div class="absolute -right-4 -top-4 w-12 h-12 rounded-full blur-xl"
+                :class="displayStats.securityThreat ? 'bg-rose-500/20 animate-pulse' : 'bg-indigo-500/10'"></div>
             <div class="flex items-center gap-2 mb-1">
-                <span class="text-[10px] uppercase text-indigo-300/60 font-bold tracking-widest">ISA Extensions</span>
+                <span class="text-[10px] uppercase font-bold tracking-widest transition-colors duration-500"
+                    :class="displayStats.securityThreat ? 'text-rose-300' : 'text-indigo-300/60'">ISA Extensions</span>
+                <div v-if="displayStats.securityThreat" class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></div>
             </div>
-            <div class="text-sm font-black text-indigo-200 uppercase tracking-tighter">RISC-V Zkn + Zkq</div>
-            <div class="text-[9px] text-indigo-400/80 mt-0.5 font-mono">SM2/3/4 HW-Vectorized</div>
+            <div class="text-sm font-black uppercase tracking-tighter transition-colors duration-500"
+                :class="displayStats.securityThreat ? 'text-rose-200' : 'text-indigo-200'">
+                {{ displayStats.securityThreat ? 'INTEGRITY RISK' : 'RISC-V Zkn + Zkq' }}
+            </div>
+            <div class="text-[9px] mt-0.5 font-mono transition-colors duration-500" :class="displayStats.securityThreat ? 'text-rose-400' : 'text-indigo-400/80'">
+                {{ displayStats.securityThreat ? 'CORE SECURITY WARNING' : 'SM2/3/4 HW-Vectorized' }}
+            </div>
         </div>
 
         <div

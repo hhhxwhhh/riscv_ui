@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { Cpu, FileCode } from 'lucide-vue-next';
+import { Cpu, FileCode, Zap } from 'lucide-vue-next';
 import type { StageInfo } from '../api/stages';
 
 const props = defineProps({
@@ -324,7 +324,7 @@ const copyCode = async () => {
                                             <Zap class="w-3 h-3 text-rose-500/60" />
                                             <span
                                                 class="text-[10px] font-mono text-rose-400/80 font-bold tabular-nums">M:{{
-                                                item.mappedStandardIdxs.length }}</span>
+                                                    item.mappedStandardIdxs.length }}</span>
                                         </div>
                                         <span
                                             class="text-[10px] font-mono text-slate-500 tabular-nums font-bold">5c</span>

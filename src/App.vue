@@ -26,12 +26,23 @@ const wsStatus = ref<'connecting' | 'connected' | 'disconnected'>('connecting');
 const lastMessageAt = ref<number | null>(null);
 const latestMetrics = ref<{ throughput: number; latency: number; securityScore: number; stdThroughput?: number; stdLatency?: number; stdSecurityScore?: number } | null>(null);
 
+// Alert System
+const alerts = ref<Array<{ id: number; title: string; message: string; type: 'danger' | 'warning' }>>([]);
+const addAlert = (alert: any) => {
+  const id = Date.now();
+  alerts.value.push({ ...alert, id });
+  setTimeout(() => {
+    alerts.value = alerts.value.filter(a => a.id !== id);
+  }, 4000);
+};
+
 // Initial empty list, populated by API and WebSocket
 const devices = ref<{
   id?: string;
   name: string;
   ip: string;
   status?: string;
+  linkType?: string;
   metrics?: { throughput: number; latency: number; securityScore: number };
   stageId?: string;
 }[]>([]);
@@ -63,6 +74,20 @@ const toggleSimulation = () => {
     isSimulating.value = true;
     currentStageIndex.value = 0;
     simTimer = setInterval(() => {
+      // Dispatch events to satisfy external consumers or history listeners
+      const stage = currentStage.value;
+      if (latestMetrics.value && stage) {
+        handleTelemetry({
+          type: 'telemetry',
+          deviceId: 'SIM_001',
+          metrics: {
+            throughput: stage.metrics.throughput + (Math.random() * 20 - 10),
+            latency: stage.metrics.latency + (Math.random() * 0.1 - 0.05),
+            securityScore: stage.metrics.securityScore
+          }
+        });
+      }
+
       if (currentStageIndex.value < STAGES.length - 1) {
         currentStageIndex.value++;
       } else {
@@ -86,26 +111,44 @@ const handleWsStatus = (status: 'connecting' | 'connected' | 'disconnected') => 
 };
 
 const handleWsLastMessage = (timestamp: number) => {
-  // Throttle updates to lastMessageAt to avoid excessive re-renders
-  if (!lastMessageAt.value || timestamp - lastMessageAt.value > 1000) {
-    lastMessageAt.value = timestamp;
-  }
+  // Use performance.now() for more precise timing if needed, but Date.now() is fine for UI
+  lastMessageAt.value = timestamp;
 };
 
 const handleTelemetry = (packet: any) => {
   if (!packet) return;
 
-  // 1. Handle dynamic device join/exit messages
+  // New: Handle Alerts from Backend
+  if (packet.type === 'alert') {
+    addAlert(packet);
+    return;
+  }
+
+  // 1. Global metrics update (EMA smoothed) for real-time dashboard stats
+  if (packet.metrics) {
+    if (!latestMetrics.value) {
+      latestMetrics.value = { ...packet.metrics };
+    } else {
+      // Smoother transitions between distinct telemetry points
+      const alpha = 0.35;
+      latestMetrics.value.throughput = latestMetrics.value.throughput * (1 - alpha) + packet.metrics.throughput * alpha;
+      latestMetrics.value.latency = latestMetrics.value.latency * (1 - alpha) + packet.metrics.latency * alpha;
+      latestMetrics.value.securityScore = latestMetrics.value.securityScore * (1 - alpha) + packet.metrics.securityScore * alpha;
+    }
+  }
+
+  // 2. Handle dynamic device lifecycle (join/exit)
   if (packet.type === 'device_join' && packet.device) {
     const exists = devices.value.find(d => d.ip === packet.device.ip || d.name === packet.device.name);
     if (!exists) {
       devices.value = [...devices.value, {
-        ...packet.device,
-        metrics: packet.device.metrics || { throughput: 0, latency: 0, securityScore: 0 },
-        stageId: packet.device.stageId || 'AUTH'
+        status: 'online',
+        metrics: { throughput: 0, latency: 0, securityScore: 0 },
+        stageId: 'AUTH',
+        ...packet.device
       }];
     } else {
-      Object.assign(exists, packet.device);
+      Object.assign(exists, { status: 'online', ...packet.device });
     }
     return;
   }
@@ -118,19 +161,17 @@ const handleTelemetry = (packet: any) => {
     return;
   }
 
-  // 2. Telemetry & Metrics Update for known devices
-  if (packet.deviceId) {
-    const dev = devices.value.find(d => d.id === packet.deviceId || d.name === packet.deviceId);
+  // 3. Telemetry Update for known devices
+  const deviceId = packet.deviceId || packet.deviceName;
+  if (deviceId) {
+    const dev = devices.value.find(d => d.id === deviceId || d.name === deviceId);
     if (dev) {
-      dev.status = 'online';
-      if (packet.metrics) dev.metrics = { ...dev.metrics, ...packet.metrics };
+      dev.status = packet.status || 'online';
+      if (packet.metrics) {
+        dev.metrics = { ...dev.metrics, ...packet.metrics };
+      }
       if (packet.stageId) dev.stageId = packet.stageId;
     }
-  }
-
-  // 3. Global Dashboard Update
-  if (packet.metrics) {
-    latestMetrics.value = { ...latestMetrics.value, ...packet.metrics };
   }
 };
 
@@ -200,7 +241,25 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-shell text-gray-100">
+  <div class="app-shell text-gray-100 relative overflow-hidden">
+    <!-- Overlay Alert System -->
+    <div class="fixed top-24 right-6 z-50 flex flex-col gap-2 pointer-events-none w-72">
+      <transition-group name="alert-slide">
+        <div v-for="alert in alerts" :key="alert.id"
+          class="p-3 rounded border backdrop-blur-md shadow-2xl pointer-events-auto" :class="{
+            'bg-rose-500/10 border-rose-500/40 text-rose-200': alert.type === 'danger',
+            'bg-amber-500/10 border-amber-500/40 text-amber-200': alert.type === 'warning'
+          }">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="w-1.5 h-1.5 rounded-full animate-ping"
+              :class="alert.type === 'danger' ? 'bg-rose-500' : 'bg-amber-500'"></div>
+            <span class="text-[10px] font-black uppercase tracking-widest">{{ alert.title }}</span>
+          </div>
+          <div class="text-[11px] font-medium leading-relaxed opacity-90">{{ alert.message }}</div>
+        </div>
+      </transition-group>
+    </div>
+
     <div class="mx-auto max-w-[1400px] px-6 py-6 flex flex-col gap-6">
       <!-- Header -->
       <header class="panel panel-glow px-4 py-2.5 flex flex-col gap-2">
@@ -333,3 +392,84 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.app-shell {
+  min-height: 100vh;
+  background-color: #020617;
+  /* Slate 950 */
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(56, 189, 248, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.03) 0%, transparent 40%);
+}
+
+.alert-slide-enter-active,
+.alert-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alert-slide-enter-from {
+  transform: translateX(100%) scale(0.9);
+  opacity: 0;
+}
+
+.alert-slide-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+.panel {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 1rem;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.panel-glow {
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+}
+
+.panel:hover {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.subtle-text {
+  color: #94a3b8;
+  /* Slate 400 */
+}
+
+.breathing-glow {
+  animation: breathing 4s ease-in-out infinite;
+}
+
+@keyframes breathing {
+
+  0%,
+  100% {
+    opacity: 0.6;
+    box-shadow: 0 0 5px rgba(99, 102, 241, 0.2);
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+  }
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(5px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+</style>

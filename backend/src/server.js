@@ -4,21 +4,24 @@ import { WebSocketServer } from "ws";
 
 const app = express();
 
-// Logger Middleware
+// Logger Middleware with better formatting
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
     const duration = Date.now() - start;
-    console.log(
-      `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`,
-    );
+    const logMsg = `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`;
+    if (res.statusCode >= 400) {
+      console.error(logMsg);
+    } else {
+      console.log(logMsg);
+    }
   });
   next();
 });
 
 // Health Check API
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, ts: Date.now() });
+  res.json({ status: "ok", uptime: process.uptime(), timestamp: Date.now() });
 });
 const frontendOriginEnv =
   process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:5174";
@@ -36,20 +39,28 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 // In-memory data
-const DEVICE_OFFLINE_TIMEOUT = 10000;
+const DEVICE_OFFLINE_TIMEOUT = 8000; // 缩短超时判定时间
 const devices = [];
 const telemetryHistory = []; // Track historical data for trend analysis
 const MAX_HISTORY_LENGTH = 100;
 
-// Periodic check for offline devices
+// Periodic check for offline devices with broadcast
 setInterval(() => {
   const now = Date.now();
   devices.forEach((d) => {
-    if (now - d.lastSeen > DEVICE_OFFLINE_TIMEOUT) {
+    if (d.status === "online" && now - d.lastSeen > DEVICE_OFFLINE_TIMEOUT) {
       d.status = "offline";
+      console.log(`[Status] Node went offline: ${d.name} (${d.id})`);
+      // 主动广播设备离线状态，确保前端同步
+      broadcast({
+        type: "device_status_change",
+        deviceId: d.id,
+        status: "offline",
+        ts: now,
+      });
     }
   });
-}, 5000);
+}, 2000); // 增加检查频率
 
 let latestMetrics = {
   throughput: 850,
@@ -64,6 +75,17 @@ app.get("/api/devices", (req, res) => {
   } catch (err) {
     console.error("[API] /api/devices error:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Trend Analysis API
+app.get("/api/analysis/trends", (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, MAX_HISTORY_LENGTH);
+    res.json(telemetryHistory.slice(-limit));
+  } catch (err) {
+    console.error("[API] /api/analysis/trends error:", err);
+    res.status(500).json({ error: "Failed to fetch trends" });
   }
 });
 
@@ -131,12 +153,21 @@ app.post("/api/telemetry", (req, res) => {
   // 4. Real-time Delivery & NetFlow Tracking
   broadcast({ type: "telemetry", ts: now, ...payload });
 
-  // Aggregate multi-device traffic for monitor
+  // Update device count for summary metrics
   const activeNodes = devices.filter((d) => d.status === "online");
   const totalTput = activeNodes.reduce(
     (sum, d) => sum + (d.metrics?.throughput || 0),
     0,
   );
+
+  // 定期广播当前活跃节点统计
+  if (Math.random() < 0.2) {
+    broadcast({
+      type: "stats_update",
+      onlineDevices: activeNodes.length,
+      totalThroughput: totalTput,
+    });
+  }
 
   console.log(
     `[NetFlow] Nodes: ${activeNodes.length} | Load: ${totalTput.toFixed(1)} Mbps | Gateway: RISC-V Zk`,
@@ -215,10 +246,29 @@ const server = app.listen(PORT, () => {
 // WebSocket server (same port)
 const wss = new WebSocketServer({ server, path: "/ws/telemetry" });
 
+// 心跳机制：定期清理死连接
+const interval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+wss.on("close", () => {
+  clearInterval(interval);
+});
+
+function heartbeat() {
+  this.isAlive = true;
+}
+
 function broadcast(message) {
   const data = JSON.stringify(message);
   wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
+    iisAlive = true;
+  ws.on("pong", heartbeat);
+  ws.f (client.readyState === 1) {
       client.send(data);
     }
   });
@@ -261,12 +311,48 @@ wss.on("connection", (ws) => {
           ip: payload.source || "websocket",
           status: "online",
           lastSeen: now,
+          metrics: payload.metrics || {
+            throughput: 0,
+            latency: 0,
+            securityScore: 0,
+          },
+          stageId: payload.stageId || "AUTH",
+          linkType: payload.linkType || "Standard",
         };
         devices.push(newDev);
         console.log(`[WS-External] New device registered: ${newDev.name}`);
         broadcast({ type: "device_join", device: newDev });
       } else {
         dev.lastSeen = now;
+        dev.status = "online";
+        // 关键：同步设备实时指标状态
+        if (payload.metrics)
+          dev.metrics = { ...dev.metrics, ...payload.metrics };
+        if (payload.stageId) dev.stageId = payload.stageId;
+        if (payload.linkType) dev.linkType = payload.linkType;
+
+        // Security Level Check
+        if (payload.metrics?.securityScore < 60) {
+          broadcast({
+            type: "alert",
+            level: "danger",
+            title: "SECURITY THRESHOLD VOID",
+            message: `Node ${dev.name} security integrity dropped to ${payload.metrics.securityScore}%`,
+            ts: now,
+          });
+        }
+      }
+
+      // Add to history
+      if (payload.metrics) {
+        telemetryHistory.push({
+          ts: now,
+          deviceId: payload.deviceId,
+          metrics: payload.metrics,
+        });
+        if (telemetryHistory.length > MAX_HISTORY_LENGTH) {
+          telemetryHistory.shift();
+        }
       }
 
       broadcast({ type: "telemetry", ts: Date.now(), ...payload });

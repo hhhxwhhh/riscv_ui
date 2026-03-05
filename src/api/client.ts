@@ -16,23 +16,24 @@ export const fetchJson = async <T>(url: string, options: FetchOptions = {}): Pro
     const timeout = window.setTimeout(() => controller.abort(), options.timeoutMs ?? 5000);
 
     try {
-        const res = await fetch(url, { signal: controller.signal });
+        const response = await fetch(url, { 
+            signal: controller.signal,
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
         
-        // Check if request was aborted (timeout)
-        if (controller.signal.aborted) {
-            throw new ApiError('Request timed out');
+        if (!response.ok) {
+            throw new ApiError(`Request failed: ${response.status}`, response.status);
         }
-        
-        if (!res.ok) {
-            throw new ApiError(`Request failed: ${res.status}`, res.status);
-        }
-        return await res.json() as T;
-    } catch (error) {
+        return await response.json() as T;
+    } catch (error: any) {
         if (error instanceof ApiError) throw error;
-        if ((error as Error).name === 'AbortError') {
-            throw new ApiError('Request timed out');
+        if (error.name === 'AbortError') {
+            throw new ApiError('Request timed out after ' + (options.timeoutMs ?? 5000) + 'ms');
         }
-        throw new ApiError('Network error');
+        console.error('[API] Network error:', error);
+        throw new ApiError('Network connection failed. Please check if the backend is reachable.');
     } finally {
         window.clearTimeout(timeout);
     }

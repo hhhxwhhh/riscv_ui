@@ -17,7 +17,8 @@ let chartInstance: echarts.ECharts | null = null;
 const stats = ref({
     standard: { throughput: 0, latency: 0, score: 0 },
     custom: { throughput: 0, latency: 0, score: 0 },
-    speedup: '1.0'
+    speedup: '1.0',
+    history: [] as any[]
 });
 
 const theme = {
@@ -30,6 +31,8 @@ const theme = {
     muted: '#64748b',
     grid: 'rgba(148, 163, 184, 0.05)'
 };
+
+const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 
 // Aggregate data for the whole group or specific device
 const getAggregatedData = (deviceName: string | string[], stage: StageInfo, allDevices: any[]) => {
@@ -52,7 +55,8 @@ const getAggregatedData = (deviceName: string | string[], stage: StageInfo, allD
                     latency: avgLat,
                     score: avgScore
                 },
-                speedup: (stage.metrics.stdLatency / avgLat).toFixed(1)
+                speedup: (stage.metrics.stdLatency / avgLat).toFixed(1),
+                history: [] as any[]
             };
         }
     }
@@ -73,7 +77,8 @@ const getAggregatedData = (deviceName: string | string[], stage: StageInfo, allD
                     latency: dev.metrics.latency,
                     score: dev.metrics.securityScore
                 },
-                speedup: (stage.metrics.stdLatency / dev.metrics.latency).toFixed(1)
+                speedup: (stage.metrics.stdLatency / dev.metrics.latency).toFixed(1),
+                history: [] as any[]
             };
         }
     }
@@ -86,7 +91,8 @@ const getAggregatedData = (deviceName: string | string[], stage: StageInfo, allD
         return {
             standard: { throughput: stage.metrics.stdThroughput, latency: stage.metrics.stdLatency, score: stage.metrics.stdSecurityScore },
             custom: { throughput: stage.metrics.throughput, latency: stage.metrics.latency, score: stage.metrics.securityScore },
-            speedup: (stage.metrics.stdLatency / stage.metrics.latency).toFixed(1)
+            speedup: (stage.metrics.stdLatency / stage.metrics.latency).toFixed(1),
+            history: [] as any[]
         };
     }
 
@@ -105,7 +111,8 @@ const getAggregatedData = (deviceName: string | string[], stage: StageInfo, allD
             latency: avgLat,
             score: avgScore
         },
-        speedup: (stage.metrics.stdLatency / avgLat).toFixed(1)
+        speedup: (stage.metrics.stdLatency / avgLat).toFixed(1),
+        history: [] as any[]
     };
 };
 
@@ -115,8 +122,12 @@ const updateChart = () => {
 
     if (!chartInstance) return;
 
-    // Optional: Fetch history from new backend API
-    // fetch('/api/analysis/trends?limit=10').then(r => r.json()).then(history => { ... });
+    // Fetch history from backend API
+    fetch(`${apiBase}/api/analysis/trends?limit=15`).then(r => r.json()).then(history => {
+        if (Array.isArray(history)) {
+            stats.value.history = history;
+        }
+    }).catch(e => console.warn('Failed to fetch trends:', e));
 
     chartInstance.setOption({
         series: [

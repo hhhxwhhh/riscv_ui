@@ -5,6 +5,11 @@ const STAGE_IDS = ["AUTH", "ENCRYPT", "DECRYPT", "HASH"];
 const DEVICE_COUNT = 30; // Increased count
 const types = ["Sensor", "Camera", "Industrial", "Relay", "Terminal"];
 
+// 模拟配置：20% 的设备会发生周期性离线
+const CHANCE_TO_FLAP = 0.2;
+const MIN_OFFLINE_TIME = 8000; // 最小离线时间 (ms)
+const MAX_OFFLINE_TIME = 20000; // 最大离线时间 (ms)
+
 console.log(`启动高效真实数据注入测试... (单连接多节点模式)`);
 
 const ws = new WebSocket(WS_URL);
@@ -25,9 +30,36 @@ ws.on("open", () => {
 
 function startDeviceLifecycle(deviceId, deviceName, ip, type) {
   let currentStageIdx = 0;
+  let isOnline = true;
+  let timer = null;
+
+  const canFlap = Math.random() < CHANCE_TO_FLAP;
 
   const sendNext = () => {
     if (ws.readyState !== WebSocket.OPEN) return;
+
+    // 如果设备当前处于离线模拟状态，跳过发送
+    if (!isOnline) return;
+
+    // 模拟随机掉线逻辑
+    if (canFlap && Math.random() < 0.05) {
+      isOnline = false;
+      const offlineDuration =
+        MIN_OFFLINE_TIME +
+        Math.random() * (MAX_OFFLINE_TIME - MIN_OFFLINE_TIME);
+      console.log(
+        `[Lifecycle] 节点退出: ${deviceName} (${deviceId})，预计离线 ${Math.round(offlineDuration / 1000)}s`,
+      );
+
+      // 模拟离线一段时间后重新加入
+      setTimeout(() => {
+        isOnline = true;
+        currentStageIdx = 0; // 重新加入时从认证阶段开始
+        console.log(`[Lifecycle] 节点重新加入: ${deviceName} (${deviceId})`);
+        sendNext();
+      }, offlineDuration);
+      return;
+    }
 
     const stageId = STAGE_IDS[currentStageIdx];
     const isLast = currentStageIdx === STAGE_IDS.length - 1;
